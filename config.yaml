@@ -1,0 +1,17 @@
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyGateway
+gateway:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+admin:
+  enablePprof: true
+telemetry:
+  metrics:
+    prometheus:
+      disable: false
+provider:
+  type: Kubernetes
+extensionApis:
+  enableBackend: true
+logging:
+  level:
+    default: debug
