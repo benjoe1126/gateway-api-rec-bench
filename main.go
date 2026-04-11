@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"onlab-bm/pkg/api"
 	"path/filepath"
 	"time"
 
@@ -13,9 +14,6 @@ import (
 	"github.com/prometheus/common/model"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/clientcmd"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -23,6 +21,7 @@ import (
 
 const (
 	reconcileTimeMetric = "controller_runtime_reconcile_time_seconds"
+	metricsUrl          = "http://localhost:19001/metrics"
 )
 
 var (
@@ -112,69 +111,6 @@ var (
 	}
 )
 
-var (
-	gatewayClassGVR = schema.GroupVersionResource{
-		Group:    "gateway.networking.k8s.io",
-		Version:  "v1",
-		Resource: "gatewayclasses",
-	}
-
-	gatewayGVR = schema.GroupVersionResource{
-		Group:    "gateway.networking.k8s.io",
-		Version:  "v1",
-		Resource: "gateways",
-	}
-
-	httpRouteGVR = schema.GroupVersionResource{
-		Group:    "gateway.networking.k8s.io",
-		Version:  "v1",
-		Resource: "httproutes",
-	}
-
-	serviceGVR = schema.GroupVersionResource{
-		Group:    "",
-		Version:  "v1",
-		Resource: "services",
-	}
-)
-
-func applyResource(ctx context.Context, client dynamic.Interface, obj any) error {
-	objMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
-	if err != nil {
-		return fmt.Errorf("convert to unstructured: %w", err)
-	}
-	u := &unstructured.Unstructured{Object: objMap}
-	var gvr schema.GroupVersionResource
-	switch u.GetKind() {
-	case "Service":
-		gvr = serviceGVR
-	case "HTTPRoute":
-		gvr = httpRouteGVR
-	case "Gateway":
-		gvr = gatewayGVR
-	case "GatewayClass":
-		gvr = gatewayClassGVR
-	default:
-		gvr = gatewayGVR
-	}
-	_, err = client.Resource(gvr).Namespace(u.GetNamespace()).Apply(
-		ctx,
-		u.GetName(),
-		u,
-		metav1.ApplyOptions{
-			TypeMeta: metav1.TypeMeta{
-				APIVersion: u.GetObjectKind().GroupVersionKind().String(),
-				Kind:       u.GetKind(),
-			},
-			Force:        true,
-			FieldManager: "gatewayclass-controller",
-		},
-	)
-	return err
-}
-
-const metricsUrl = "http://localhost:19001/metrics"
-
 func waitForSuccessfulReconcile(ctx context.Context, notification chan<- error) {
 	initialReconciles, err := fetchSuccesfulReconcileTotal()
 	if err != nil {
@@ -205,28 +141,6 @@ var (
 	routeCounter   = 0
 )
 
-func gatewayAdder(client *dynamic.DynamicClient) error {
-	gw := baseGateway.DeepCopy()
-	gw.Name = fmt.Sprintf(gw.Name, gatewayCounter)
-	if err := applyResource(context.Background(), client, &gw); err != nil {
-		return fmt.Errorf("failed to apply resource %d :%v", gatewayCounter, err)
-	}
-	gatewayCounter++
-	return nil
-}
-
-func routeAdder(client *dynamic.DynamicClient) error {
-	route := baseHttpRoute.DeepCopy()
-	route.Name = fmt.Sprintf(route.Name, gatewayCounter)
-	routeParent := routeCounter % gatewayCounter
-	route.Spec.CommonRouteSpec.ParentRefs[0].Name = gatewayv1.ObjectName(fmt.Sprintf(baseGateway.Name, routeParent))
-	if err := applyResource(context.Background(), client, &route); err != nil {
-		return fmt.Errorf("failed to apply resource %d :%v", routeCounter, err)
-	}
-	routeCounter++
-	return nil
-}
-
 func main() {
 	notification := make(chan error)
 	defer close(notification)
@@ -239,26 +153,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	currentReconcileTime := mustFetchReconcileTimeSum()
-	log.Printf("current reconcile time: %v", currentReconcileTime)
-	go waitForSuccessfulReconcile(context.Background(), notification)
-	if err := applyResource(context.Background(), client, &baseGatewayClass); err != nil {
-		log.Fatalf("failed to apply gwclass %v", err)
-	}
-	for i := range 10 {
-		gw := baseGateway.DeepCopy()
-		gw.Name = fmt.Sprintf(gw.Name, i)
-		if err := applyResource(context.Background(), client, &gw); err != nil {
-			log.Fatalf("failed to apply resource %d :%v", i, err)
-		}
-	}
-	log.Println("waiting for reconcile to finish")
-	if err := <-notification; err != nil {
+	capi := api.NewCompositeApi(client)
+	gg := baseGateway.DeepCopy()
+	gg.Name = "something-something"
+	if err := capi.Gateway().Create(context.Background(), gg); err != nil {
 		log.Fatal(err)
 	}
-	newReconcileTime := mustFetchReconcileTimeSum()
-	log.Printf("current reconcile time: %v", newReconcileTime-currentReconcileTime)
 }
 
 func floatToSecond(s float64) time.Duration {
