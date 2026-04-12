@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"onlab-bm/pkg/api"
 	"onlab-bm/pkg/metrics"
@@ -123,9 +125,26 @@ func main() {
 		log.Fatal(err)
 	}
 	capi := api.NewCompositeApi(client)
-	waitChan := make(chan metrics.ReconcileResult, 5)
 	fetcher := metrics.NewFetcher(metricsUrl)
-	gwSuite := suite.New()
-	bmSuite := suite.New()
+	//setups base gatewayclass
+	if err := capi.GatewayClass().Create(context.Background(), &baseGatewayClass); err != nil {
+		log.Fatal(err)
+	}
+	deltas := make([]*suite.Delta, 0, 8000)
+	//first we add 1000 gateways, delete each, readd them, then modify it slightly
+	for i := range 1000 {
+		gw := baseGateway.DeepCopy()
+		gw.Name = fmt.Sprintf(baseGateway.Name, i)
+		deltas = append(deltas, suite.NewDelta(suite.DeltaOpAdd, capi.Gateway(), gw))
+		deltas = append(deltas, suite.NewDelta(suite.DeltaOpDelete, capi.Gateway(), gw))
+		deltas = append(deltas, suite.NewDelta(suite.DeltaOpAdd, capi.Gateway(), gw))
+		gw.Labels = map[string]string{
+			"version": "v2",
+		}
+		deltas = append(deltas, suite.NewDelta(suite.DeltaOpModify, capi.Gateway(), gw))
+	}
+	bmSuite := suite.New(fetcher, deltas...)
+	results := bmSuite.WalkThroughDeltas()
+	fmt.Println(results)
 
 }

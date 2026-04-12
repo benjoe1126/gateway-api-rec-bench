@@ -47,7 +47,6 @@ func (f *Fetcher) WaitForSuccessfulReconcile(ctx context.Context, ch chan<- Reco
 			if newReconciles != initialReconciles {
 				delta := f.MustFetchReconcileTimeMetric() - initialReconcileTime
 				ch <- ReconcileResult{delta: delta}
-				return
 			}
 		}
 	}

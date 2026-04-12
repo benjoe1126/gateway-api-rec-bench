@@ -92,9 +92,10 @@ func (d *Delta) Apply(ctx context.Context) error {
 	}
 }
 
-func NewDelta(op DeltaOperation, rapi api.GWV1Api) *Delta {
+func NewDelta(op DeltaOperation, rapi api.GWV1Api, resource api.GWV1Resource) *Delta {
 	return &Delta{
 		op:          op,
 		resourceApi: rapi,
+		resource:    resource,
 	}
 }

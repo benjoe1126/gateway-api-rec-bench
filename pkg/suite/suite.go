@@ -2,16 +2,17 @@ package suite
 
 import (
 	"context"
+	"log"
 	"onlab-bm/pkg/metrics"
 	"time"
 )
 
 type Suite struct {
 	deltas  []*Delta
-	fetcher metrics.Fetcher
+	fetcher *metrics.Fetcher
 }
 
-func New(fetcher metrics.Fetcher, deltas ...*Delta) *Suite {
+func New(fetcher *metrics.Fetcher, deltas ...*Delta) *Suite {
 	return &Suite{
 		deltas:  deltas,
 		fetcher: fetcher,
@@ -41,7 +42,9 @@ func (s *Suite) WalkThroughDeltas() []*DeltaReconcileResult {
 	defer cancel()
 	go s.fetcher.WaitForSuccessfulReconcile(ctx, rchan)
 	for _, d := range s.deltas {
+		log.Println("Applying delta ", d.String())
 		if err := d.Apply(ctx); err != nil {
+			log.Println("Error applying delta ", d.String())
 			ret = append(ret, &DeltaReconcileResult{
 				numGatewayclass: numGatewayclass,
 				numGateways:     numGateways,
@@ -51,20 +54,28 @@ func (s *Suite) WalkThroughDeltas() []*DeltaReconcileResult {
 				status:          err.Error(),
 				delta:           d.String(),
 			})
+			continue
+		}
+		adder := 0
+		if d.op == DeltaOpAdd {
+			adder++
+		} else if d.op == DeltaOpDelete {
+			adder--
 		}
 		switch d.UnderlyingType() {
 		case DeltaUnderlyingTypeService:
-			numServices++
+			numServices += adder
 		case DeltaUnderlyingTypeGatewayClass:
-			numGatewayclass++
+			numGatewayclass += adder
 		case DeltaUnderlyingTypeGateway:
-			numGateways++
+			numGateways += adder
 		case DeltaUnderlyingTypeHTTPRoute:
-			numHttpRoutes++
+			numHttpRoutes += adder
 		case DeltaUnderlyingTypeUnknown:
 		default:
 		}
 		res := <-rchan
+		log.Println("Finished applying delta ", d.String())
 		status := "success"
 		if res.Error() != nil {
 			status = res.Error().Error()
