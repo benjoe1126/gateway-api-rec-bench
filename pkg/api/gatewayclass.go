@@ -25,7 +25,7 @@ func NewGatewayClassApi(dc *dynamic.DynamicClient) *GatewayClassApi {
 	return &GatewayClassApi{client: dc}
 }
 
-func (g *GatewayClassApi) Get(ctx context.Context, name string) (*gatewayv1.GatewayClass, error) {
+func (g *GatewayClassApi) Get(ctx context.Context, name, _ string) (GWV1Resource, error) {
 	unstruct, err := g.client.Resource(GatewayClassGVR).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
@@ -38,12 +38,12 @@ func (g *GatewayClassApi) Get(ctx context.Context, name string) (*gatewayv1.Gate
 	return gateway, nil
 }
 
-func (g *GatewayClassApi) List(ctx context.Context) ([]*gatewayv1.GatewayClass, error) {
+func (g *GatewayClassApi) List(ctx context.Context, _ string) ([]GWV1Resource, error) {
 	list, err := g.client.Resource(GatewayClassGVR).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
-	gateways := make([]*gatewayv1.GatewayClass, 0, len(list.Items))
+	gateways := make([]GWV1Resource, 0, len(list.Items))
 	for _, item := range list.Items {
 		gateway := &gatewayv1.GatewayClass{}
 		err = runtime.DefaultUnstructuredConverter.FromUnstructured(item.Object, gateway)
@@ -55,7 +55,7 @@ func (g *GatewayClassApi) List(ctx context.Context) ([]*gatewayv1.GatewayClass, 
 	return gateways, nil
 }
 
-func (g *GatewayClassApi) Create(ctx context.Context, gateway *gatewayv1.GatewayClass) error {
+func (g *GatewayClassApi) Create(ctx context.Context, gateway GWV1Resource) error {
 	unstruct, err := runtime.DefaultUnstructuredConverter.ToUnstructured(gateway)
 	if err != nil {
 		return err
@@ -67,7 +67,7 @@ func (g *GatewayClassApi) Create(ctx context.Context, gateway *gatewayv1.Gateway
 	return nil
 }
 
-func (g *GatewayClassApi) Update(ctx context.Context, gateway *gatewayv1.GatewayClass) error {
+func (g *GatewayClassApi) Update(ctx context.Context, gateway GWV1Resource) error {
 	unstruct, err := runtime.DefaultUnstructuredConverter.ToUnstructured(gateway)
 	if err != nil {
 		return err
@@ -79,6 +79,6 @@ func (g *GatewayClassApi) Update(ctx context.Context, gateway *gatewayv1.Gateway
 	return nil
 }
 
-func (g *GatewayClassApi) Delete(ctx context.Context, name string) error {
+func (g *GatewayClassApi) Delete(ctx context.Context, name, _ string) error {
 	return g.client.Resource(GatewayClassGVR).Delete(ctx, name, metav1.DeleteOptions{})
 }

@@ -1,10 +1,10 @@
 package main
 
 import (
-	"context"
 	"log"
 	"onlab-bm/pkg/api"
 	"onlab-bm/pkg/metrics"
+	"onlab-bm/pkg/suite"
 	"path/filepath"
 
 	v1 "k8s.io/api/core/v1"
@@ -124,15 +124,8 @@ func main() {
 	}
 	capi := api.NewCompositeApi(client)
 	waitChan := make(chan metrics.ReconcileResult, 5)
-	ftch := metrics.NewFetcher(metricsUrl)
-
-	gg := baseGateway.DeepCopy()
-	gg.Name = "something-something"
-	go ftch.WaitForSuccessfulReconcile(context.Background(), waitChan)
-	if err := capi.Gateway().Create(context.Background(), gg); err != nil {
-		log.Fatal(err)
-	}
-	res := <-waitChan
-	log.Printf("delta reconcile time is %v\n", res.Delta())
+	fetcher := metrics.NewFetcher(metricsUrl)
+	gwSuite := suite.New()
+	bmSuite := suite.New()
 
 }

@@ -25,7 +25,7 @@ func NewGatewayApi(client *dynamic.DynamicClient) *GatewayApi {
 	return &GatewayApi{client: client}
 }
 
-func (g *GatewayApi) Get(ctx context.Context, name, namespace string) (*gatewayv1.Gateway, error) {
+func (g *GatewayApi) Get(ctx context.Context, name, namespace string) (GWV1Resource, error) {
 	unstruct, err := g.client.Resource(GatewayGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
@@ -38,12 +38,12 @@ func (g *GatewayApi) Get(ctx context.Context, name, namespace string) (*gatewayv
 	return gateway, nil
 }
 
-func (g *GatewayApi) List(ctx context.Context, namespace string) ([]*gatewayv1.Gateway, error) {
+func (g *GatewayApi) List(ctx context.Context, namespace string) ([]GWV1Resource, error) {
 	list, err := g.client.Resource(GatewayGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
-	gateways := make([]*gatewayv1.Gateway, 0, len(list.Items))
+	gateways := make([]GWV1Resource, 0, len(list.Items))
 	for _, item := range list.Items {
 		gateway := &gatewayv1.Gateway{}
 		err = runtime.DefaultUnstructuredConverter.FromUnstructured(item.Object, gateway)
@@ -54,25 +54,25 @@ func (g *GatewayApi) List(ctx context.Context, namespace string) ([]*gatewayv1.G
 	}
 	return gateways, nil
 }
-func (g *GatewayApi) Create(ctx context.Context, gateway *gatewayv1.Gateway) error {
+func (g *GatewayApi) Create(ctx context.Context, gateway GWV1Resource) error {
 	unstruct, err := runtime.DefaultUnstructuredConverter.ToUnstructured(gateway)
 	if err != nil {
 		return err
 	}
 	u := &unstructured.Unstructured{Object: unstruct}
-	if _, err = g.client.Resource(GatewayGVR).Namespace(gateway.Namespace).Create(ctx, u, metav1.CreateOptions{}); err != nil {
+	if _, err = g.client.Resource(GatewayGVR).Namespace(gateway.GetNamespace()).Create(ctx, u, metav1.CreateOptions{}); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (g *GatewayApi) Update(ctx context.Context, gateway *gatewayv1.Gateway) error {
+func (g *GatewayApi) Update(ctx context.Context, gateway GWV1Resource) error {
 	unstruct, err := runtime.DefaultUnstructuredConverter.ToUnstructured(gateway)
 	if err != nil {
 		return err
 	}
 	u := &unstructured.Unstructured{Object: unstruct}
-	if _, err = g.client.Resource(GatewayGVR).Namespace(gateway.Namespace).Update(ctx, u, metav1.UpdateOptions{}); err != nil {
+	if _, err = g.client.Resource(GatewayGVR).Namespace(gateway.GetNamespace()).Update(ctx, u, metav1.UpdateOptions{}); err != nil {
 		return err
 	}
 	return nil

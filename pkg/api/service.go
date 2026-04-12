@@ -25,7 +25,7 @@ func NewServiceApi(client *dynamic.DynamicClient) *ServiceApi {
 	return &ServiceApi{client: client}
 }
 
-func (s *ServiceApi) Get(ctx context.Context, name, namespace string) (*v1.Service, error) {
+func (s *ServiceApi) Get(ctx context.Context, name, namespace string) (GWV1Resource, error) {
 	unstruct, err := s.client.Resource(ServiceGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
@@ -38,12 +38,12 @@ func (s *ServiceApi) Get(ctx context.Context, name, namespace string) (*v1.Servi
 	return service, nil
 }
 
-func (s *ServiceApi) List(ctx context.Context, namespace string) ([]*v1.Service, error) {
+func (s *ServiceApi) List(ctx context.Context, namespace string) ([]GWV1Resource, error) {
 	list, err := s.client.Resource(ServiceGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
-	services := make([]*v1.Service, 0, len(list.Items))
+	services := make([]GWV1Resource, 0, len(list.Items))
 	for _, item := range list.Items {
 		service := &v1.Service{}
 		err = runtime.DefaultUnstructuredConverter.FromUnstructured(item.Object, service)
@@ -54,25 +54,25 @@ func (s *ServiceApi) List(ctx context.Context, namespace string) ([]*v1.Service,
 	}
 	return services, nil
 }
-func (s *ServiceApi) Create(ctx context.Context, service *v1.Service) error {
+func (s *ServiceApi) Create(ctx context.Context, service GWV1Resource) error {
 	unstruct, err := runtime.DefaultUnstructuredConverter.ToUnstructured(service)
 	if err != nil {
 		return err
 	}
 	u := &unstructured.Unstructured{Object: unstruct}
-	if _, err = s.client.Resource(ServiceGVR).Namespace(service.Namespace).Create(ctx, u, metav1.CreateOptions{}); err != nil {
+	if _, err = s.client.Resource(ServiceGVR).Namespace(service.GetNamespace()).Create(ctx, u, metav1.CreateOptions{}); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *ServiceApi) Update(ctx context.Context, service *v1.Service) error {
+func (s *ServiceApi) Update(ctx context.Context, service GWV1Resource) error {
 	unstruct, err := runtime.DefaultUnstructuredConverter.ToUnstructured(service)
 	if err != nil {
 		return err
 	}
 	u := &unstructured.Unstructured{Object: unstruct}
-	if _, err = s.client.Resource(ServiceGVR).Namespace(service.Namespace).Update(ctx, u, metav1.UpdateOptions{}); err != nil {
+	if _, err = s.client.Resource(ServiceGVR).Namespace(service.GetNamespace()).Update(ctx, u, metav1.UpdateOptions{}); err != nil {
 		return err
 	}
 	return nil
