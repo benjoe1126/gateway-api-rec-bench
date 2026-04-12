@@ -2,6 +2,7 @@ package suite
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"onlab-bm/pkg/metrics"
 	"time"
@@ -29,6 +30,23 @@ type DeltaReconcileResult struct {
 	delta           string
 }
 
+func (d *DeltaReconcileResult) CSV() string {
+	return fmt.Sprintf("%d,%d,%d,%d,%v", d.numGatewayclass, d.numGateways, d.numHttpRoutes, d.numServices, d.reconcileTime)
+}
+
+func (d *DeltaReconcileResult) String() string {
+	resultString := `
+		GatewayClasses: %d
+		Gateways: %d
+		HttpRoutes: %d
+		Services: %d
+		Reconcile time: %v
+		Status: %s
+		delta: %s
+`
+	return fmt.Sprintf(resultString, d.numGatewayclass, d.numGateways, d.numHttpRoutes, d.numServices, d.reconcileTime, d.status, d.delta)
+}
+
 func (s *Suite) WalkThroughDeltas() []*DeltaReconcileResult {
 	ret := make([]*DeltaReconcileResult, 0, len(s.deltas))
 	var (
@@ -44,7 +62,7 @@ func (s *Suite) WalkThroughDeltas() []*DeltaReconcileResult {
 	for _, d := range s.deltas {
 		log.Println("Applying delta ", d.String())
 		if err := d.Apply(ctx); err != nil {
-			log.Println("Error applying delta ", d.String())
+			log.Println("Error applying delta ", d.String(), err)
 			ret = append(ret, &DeltaReconcileResult{
 				numGatewayclass: numGatewayclass,
 				numGateways:     numGateways,

@@ -2,11 +2,14 @@ package api
 
 import (
 	"context"
+	"encoding/json"
+	"onlab-bm/pkg/patch"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -67,16 +70,13 @@ func (g *GatewayClassApi) Create(ctx context.Context, gateway GWV1Resource) erro
 	return nil
 }
 
-func (g *GatewayClassApi) Update(ctx context.Context, gateway GWV1Resource) error {
-	unstruct, err := runtime.DefaultUnstructuredConverter.ToUnstructured(gateway)
+func (g *GatewayClassApi) Patch(ctx context.Context, name, _ string, patches []patch.JsonPatch) error {
+	patchBytes, err := json.Marshal(patches)
 	if err != nil {
 		return err
 	}
-	u := &unstructured.Unstructured{Object: unstruct}
-	if _, err = g.client.Resource(GatewayClassGVR).Update(ctx, u, metav1.UpdateOptions{}); err != nil {
-		return err
-	}
-	return nil
+	_, err = g.client.Resource(GatewayClassGVR).Patch(ctx, name, types.JSONPatchType, patchBytes, metav1.PatchOptions{})
+	return err
 }
 
 func (g *GatewayClassApi) Delete(ctx context.Context, name, _ string) error {

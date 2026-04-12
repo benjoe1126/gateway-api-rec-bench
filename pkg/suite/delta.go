@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"onlab-bm/pkg/api"
+	"onlab-bm/pkg/patch"
 
 	v1 "k8s.io/api/core/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -34,6 +35,7 @@ type Delta struct {
 	op          DeltaOperation
 	resourceApi api.GWV1Api
 	resource    api.GWV1Resource
+	patches     []patch.JsonPatch
 }
 
 func (d *Delta) String() string {
@@ -86,16 +88,17 @@ func (d *Delta) Apply(ctx context.Context) error {
 	case DeltaOpDelete:
 		return d.resourceApi.Delete(ctx, name, namespace)
 	case DeltaOpModify:
-		return d.resourceApi.Update(ctx, d.resource)
+		return d.resourceApi.Patch(ctx, name, namespace, d.patches)
 	default:
 		return fmt.Errorf("unknown delta operation: %s", d.op)
 	}
 }
 
-func NewDelta(op DeltaOperation, rapi api.GWV1Api, resource api.GWV1Resource) *Delta {
+func NewDelta(op DeltaOperation, rapi api.GWV1Api, resource api.GWV1Resource, patches ...patch.JsonPatch) *Delta {
 	return &Delta{
 		op:          op,
 		resourceApi: rapi,
 		resource:    resource,
+		patches:     patches,
 	}
 }

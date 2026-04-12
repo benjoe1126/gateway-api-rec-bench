@@ -6,7 +6,9 @@ import (
 	"log"
 	"onlab-bm/pkg/api"
 	"onlab-bm/pkg/metrics"
+	"onlab-bm/pkg/patch"
 	"onlab-bm/pkg/suite"
+	"os"
 	"path/filepath"
 
 	v1 "k8s.io/api/core/v1"
@@ -141,10 +143,24 @@ func main() {
 		gw.Labels = map[string]string{
 			"version": "v2",
 		}
-		deltas = append(deltas, suite.NewDelta(suite.DeltaOpModify, capi.Gateway(), gw))
+		patches := []patch.JsonPatch{
+			{
+				Op:    "add",
+				Path:  "/metadata/labels",
+				Value: map[string]string{"version": "v2"},
+			},
+		}
+		deltas = append(deltas, suite.NewDelta(suite.DeltaOpModify, capi.Gateway(), gw, patches...))
 	}
 	bmSuite := suite.New(fetcher, deltas...)
 	results := bmSuite.WalkThroughDeltas()
-	fmt.Println(results)
-
+	of, err := os.Create("results")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer of.Close()
+	for _, result := range results {
+		of.WriteString(result.String())
+		of.WriteString("\n")
+	}
 }
