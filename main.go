@@ -140,27 +140,31 @@ func main() {
 		deltas = append(deltas, suite.NewDelta(suite.DeltaOpAdd, capi.Gateway(), gw))
 		deltas = append(deltas, suite.NewDelta(suite.DeltaOpDelete, capi.Gateway(), gw))
 		deltas = append(deltas, suite.NewDelta(suite.DeltaOpAdd, capi.Gateway(), gw))
-		gw.Labels = map[string]string{
-			"version": "v2",
-		}
 		patches := []patch.JsonPatch{
 			{
 				Op:    "add",
-				Path:  "/metadata/labels",
-				Value: map[string]string{"version": "v2"},
+				Path:  "/spec/listeners/0/port",
+				Value: 8080,
 			},
 		}
 		deltas = append(deltas, suite.NewDelta(suite.DeltaOpModify, capi.Gateway(), gw, patches...))
 	}
 	bmSuite := suite.New(fetcher, deltas...)
 	results := bmSuite.WalkThroughDeltas()
-	of, err := os.Create("results")
+	of, err := os.Create("results4")
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer of.Close()
+	csv, err := os.Create("results2.csv")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer csv.Close()
 	for _, result := range results {
 		of.WriteString(result.String())
 		of.WriteString("\n")
+		csv.WriteString(result.CSV())
+		csv.WriteString("\n")
 	}
 }

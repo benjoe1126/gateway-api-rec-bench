@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -26,33 +27,42 @@ func NewFetcher(metricsURL string) *Fetcher {
 	}
 }
 
+var WaitInitiateError = fmt.Errorf("wait initiate")
+
 func (f *Fetcher) WaitForSuccessfulReconcile(ctx context.Context, ch chan<- ReconcileResult) {
 	initialReconciles, err := f.FetchSuccessfulReconcileMetric()
 	if err != nil {
+		log.Printf("failed to fetch initial reconciles: %s", err)
 		ch <- ReconcileResult{err: err}
 		return
 	}
-	initialReconcileTime := f.MustFetchReconcileTimeMetric()
+	initialReconcileTime := f.MustFetchReconcileTimeSecondsMetric()
+	ch <- ReconcileResult{err: WaitInitiateError}
 	for {
 		select {
 		case <-ctx.Done():
 			ch <- ReconcileResult{err: ctx.Err()}
+			log.Println(ctx.Err())
 			return
 		default:
 			newReconciles, err := f.FetchSuccessfulReconcileMetric()
 			if err != nil {
+				log.Println(err)
 				ch <- ReconcileResult{err: err}
 				return
 			}
 			if newReconciles != initialReconciles {
-				delta := f.MustFetchReconcileTimeMetric() - initialReconcileTime
+				nrec := f.MustFetchReconcileTimeSecondsMetric()
+				delta := nrec - initialReconcileTime
+				initialReconciles = newReconciles
+				initialReconcileTime = nrec
 				ch <- ReconcileResult{delta: delta}
 			}
 		}
 	}
 }
 
-func (f *Fetcher) MustFetchReconcileTimeMetric() time.Duration {
+func (f *Fetcher) MustFetchReconcileTimeSecondsMetric() float64 {
 	ret, err := f.FetchReconcileTimeMetric()
 	if err != nil {
 		panic(err)
@@ -60,15 +70,15 @@ func (f *Fetcher) MustFetchReconcileTimeMetric() time.Duration {
 	return ret
 }
 
-func (f *Fetcher) FetchReconcileTimeMetric() (time.Duration, error) {
+func (f *Fetcher) FetchReconcileTimeMetric() (float64, error) {
 	metric, err := fetchAndFilterMetric(f.metricsURL, reconcileTimeMetric)
 	if err != nil {
 		return 0, err
 	}
-	return floatToSecond(getMetricValue(metric.Metric[0])), nil
+	return getMetricValue(metric.Metric[0]), nil
 }
 
-func (f *Fetcher) MustFetchSuccessfulReconcileMetric() float64 {
+func (f *Fetcher) MustFetchSuccessfulReconcileMetric() int {
 	ret, err := f.FetchSuccessfulReconcileMetric()
 	if err != nil {
 		panic(err)
@@ -76,7 +86,7 @@ func (f *Fetcher) MustFetchSuccessfulReconcileMetric() float64 {
 	return ret
 }
 
-func (f *Fetcher) FetchSuccessfulReconcileMetric() (float64, error) {
+func (f *Fetcher) FetchSuccessfulReconcileMetric() (int, error) {
 	metrics, err := fetchAndFilterMetric(f.metricsURL, successfulReconcileMetrics)
 	if err != nil {
 		return 0.0, fmt.Errorf("error fetching metrics: %v", err)
@@ -84,7 +94,7 @@ func (f *Fetcher) FetchSuccessfulReconcileMetric() (float64, error) {
 	for _, metric := range metrics.Metric {
 		for _, label := range metric.Label {
 			if *label.Name == "result" && *label.Value == "success" {
-				return metric.Counter.GetValue(), nil
+				return int(metric.Counter.GetValue()), nil
 			}
 		}
 	}

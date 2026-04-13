@@ -1,13 +1,11 @@
 package metrics
 
-import "time"
-
 type ReconcileResult struct {
-	delta time.Duration
+	delta float64
 	err   error
 }
 
-func (r *ReconcileResult) Delta() time.Duration {
+func (r *ReconcileResult) Delta() float64 {
 	return r.delta
 }
 
