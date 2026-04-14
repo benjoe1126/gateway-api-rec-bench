@@ -90,6 +90,195 @@
                 "value": 80
               }
             ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 11,
+        "x": 0,
+        "y": 1
+      },
+      "id": 33,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "controller_runtime_reconcile_time_seconds_sum",
+          "legendFormat": "{{controller}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Reconcile time total",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cfhdpy9952o74e"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 11,
+        "y": 1
+      },
+      "id": 34,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "group by (result) (controller_runtime_reconcile_total{result!=\"success\"})",
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Non succesful reconciles",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cfhdpy9952o74e"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
           }
         },
         "overrides": []
@@ -98,7 +287,7 @@
         "h": 11,
         "w": 11,
         "x": 0,
-        "y": 1
+        "y": 10
       },
       "id": 30,
       "options": {
@@ -193,7 +382,7 @@
         "h": 11,
         "w": 12,
         "x": 11,
-        "y": 1
+        "y": 10
       },
       "id": 32,
       "options": {
@@ -228,7 +417,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 12
+        "y": 21
       },
       "id": 23,
       "panels": [],
@@ -262,7 +451,7 @@
         "h": 11,
         "w": 8,
         "x": 0,
-        "y": 13
+        "y": 22
       },
       "id": 24,
       "options": {
@@ -359,7 +548,7 @@
         "h": 11,
         "w": 16,
         "x": 8,
-        "y": 13
+        "y": 22
       },
       "id": 25,
       "options": {
@@ -429,7 +618,7 @@
         "h": 10,
         "w": 8,
         "x": 0,
-        "y": 24
+        "y": 33
       },
       "id": 26,
       "options": {
@@ -527,7 +716,7 @@
         "h": 10,
         "w": 16,
         "x": 8,
-        "y": 24
+        "y": 33
       },
       "id": 27,
       "options": {
@@ -621,7 +810,7 @@
         "h": 11,
         "w": 12,
         "x": 0,
-        "y": 34
+        "y": 43
       },
       "id": 28,
       "options": {
@@ -715,7 +904,7 @@
         "h": 11,
         "w": 12,
         "x": 12,
-        "y": 34
+        "y": 43
       },
       "id": 29,
       "options": {
@@ -750,7 +939,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 45
+        "y": 54
       },
       "id": 1,
       "panels": [],
@@ -824,7 +1013,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 46
+        "y": 55
       },
       "id": 4,
       "interval": "5s",
@@ -955,7 +1144,7 @@
         "h": 10,
         "w": 12,
         "x": 12,
-        "y": 46
+        "y": 55
       },
       "id": 5,
       "interval": "5s",
@@ -1086,7 +1275,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 56
+        "y": 65
       },
       "id": 20,
       "options": {
@@ -1180,7 +1369,7 @@
         "h": 10,
         "w": 12,
         "x": 12,
-        "y": 56
+        "y": 65
       },
       "id": 19,
       "options": {
@@ -1274,7 +1463,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 66
+        "y": 75
       },
       "id": 21,
       "options": {
@@ -1309,7 +1498,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 74
+        "y": 83
       },
       "id": 12,
       "panels": [],
@@ -1395,7 +1584,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 75
+        "y": 84
       },
       "id": 17,
       "interval": "5s",
@@ -1555,7 +1744,7 @@
         "h": 10,
         "w": 12,
         "x": 12,
-        "y": 75
+        "y": 84
       },
       "id": 18,
       "interval": "5s",
@@ -1625,6 +1814,6 @@
   "timezone": "browser",
   "title": "Gateway API Comparison",
   "uid": "gateway_showdown",
-  "version": 12,
+  "version": 16,
   "weekStart": ""
 }
