@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"onlab-bm/pkg/api"
@@ -110,13 +111,16 @@ var (
 )
 
 var (
-	gatewayCounter = 0
-	routeCounter   = 0
+	testSuite       = flag.String("suite", "default", "suite to run")
+	outText         = flag.String("output-text", "results", "text for output")
+	outCSV          = flag.String("output-csv", "results.csv", "csv for output")
+	suiteNameToFunc = map[string]func(compositeApi *api.CompositeApi) ([]*suite.Delta, error){
+		"thousandGatewaysOneGatewayClass": thousandGatewaysOneGatewayClass,
+	}
 )
 
 func main() {
-	notification := make(chan error)
-	defer close(notification)
+	flag.Parse()
 	kubeconfig := filepath.Join("tmp", "kubeconfig.yaml")
 	kc, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
@@ -128,9 +132,37 @@ func main() {
 	}
 	capi := api.NewCompositeApi(client)
 	fetcher := metrics.NewFetcher(metricsUrl)
-	//setups base gatewayclass
-	if err := capi.GatewayClass().Create(context.Background(), &baseGatewayClass); err != nil {
+	f := suiteNameToFunc[*testSuite]
+	if f == nil {
+		log.Fatalf("unknown test suite: %s", *testSuite)
+	}
+	deltas, err := f(capi)
+	if err != nil {
 		log.Fatal(err)
+	}
+	bmSuite := suite.New(fetcher, deltas...)
+	results := bmSuite.WalkThroughDeltas()
+	of, err := os.Create(*outText)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer of.Close()
+	csv, err := os.Create(*outCSV)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer csv.Close()
+	for _, result := range results {
+		of.WriteString(result.String())
+		of.WriteString("\n")
+		csv.WriteString(result.CSV())
+		csv.WriteString("\n")
+	}
+}
+
+func thousandGatewaysOneGatewayClass(capi *api.CompositeApi) ([]*suite.Delta, error) {
+	if err := capi.GatewayClass().Create(context.Background(), &baseGatewayClass); err != nil {
+		return nil, err
 	}
 	deltas := make([]*suite.Delta, 0, 8000)
 	//first we add 1000 gateways, delete each, readd them, then modify it slightly
@@ -149,22 +181,5 @@ func main() {
 		}
 		deltas = append(deltas, suite.NewDelta(suite.DeltaOpModify, capi.Gateway(), gw, patches...))
 	}
-	bmSuite := suite.New(fetcher, deltas...)
-	results := bmSuite.WalkThroughDeltas()
-	of, err := os.Create("results4")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer of.Close()
-	csv, err := os.Create("results2.csv")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer csv.Close()
-	for _, result := range results {
-		of.WriteString(result.String())
-		of.WriteString("\n")
-		csv.WriteString(result.CSV())
-		csv.WriteString("\n")
-	}
+	return deltas, nil
 }
