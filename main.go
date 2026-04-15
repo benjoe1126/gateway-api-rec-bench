@@ -11,6 +11,7 @@ import (
 	"onlab-bm/pkg/suite"
 	"os"
 	"path/filepath"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -61,13 +62,15 @@ var (
 	}
 	baseService = v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "http-backend",
+			Name:      "http-backend",
+			Namespace: metav1.NamespaceDefault,
 		},
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: v1.SchemeGroupVersion.String(),
 			Kind:       "Service",
 		},
 		Spec: v1.ServiceSpec{
+			ClusterIP: "None",
 			Ports: []v1.ServicePort{
 				{
 					Name: "http",
@@ -76,15 +79,20 @@ var (
 			},
 		},
 	}
+	serviceGroup  = gatewayv1.Group(baseService.GroupVersionKind().Group)
+	serviceKind   = gatewayv1.Kind(baseService.GroupVersionKind().Kind)
+	serviceNs     = gatewayv1.Namespace(baseService.GetNamespace())
 	baseHttpRoute = gatewayv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "base-http-route-%d",
+			Name:      "base-http-route-%d",
+			Namespace: metav1.NamespaceDefault,
 		},
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: gatewayv1.GroupVersion.String(),
 			Kind:       "HTTPRoute",
 		},
 		Spec: gatewayv1.HTTPRouteSpec{
+			Hostnames: []gatewayv1.Hostname{},
 			Rules: []gatewayv1.HTTPRouteRule{
 				{
 					BackendRefs: []gatewayv1.HTTPBackendRef{
@@ -102,7 +110,7 @@ var (
 			CommonRouteSpec: gatewayv1.CommonRouteSpec{
 				ParentRefs: []gatewayv1.ParentReference{
 					{
-						Name: "base-gateway-%d",
+						Name: "base-gateway-0",
 					},
 				},
 			},
@@ -116,6 +124,7 @@ var (
 	outCSV          = flag.String("output-csv", "results.csv", "csv for output")
 	suiteNameToFunc = map[string]func(compositeApi *api.CompositeApi) ([]*suite.Delta, error){
 		"thousandGatewaysOneGatewayClass": thousandGatewaysOneGatewayClass,
+		"semiLarge":                       semiLarge,
 	}
 )
 
@@ -131,6 +140,11 @@ func main() {
 		log.Fatal(err)
 	}
 	capi := api.NewCompositeApi(client)
+	/*routes, err := capi.HTTPRoute().List(context.Background(), "default")
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("existing routes: ", *routes[0].(*gatewayv1.HTTPRoute))*/
 	fetcher := metrics.NewFetcher(metricsUrl)
 	f := suiteNameToFunc[*testSuite]
 	if f == nil {
@@ -141,6 +155,8 @@ func main() {
 		log.Fatal(err)
 	}
 	bmSuite := suite.New(fetcher, deltas...)
+	// wait a bit for initial reconciles
+	time.Sleep(4 * time.Second)
 	results := bmSuite.WalkThroughDeltas()
 	of, err := os.Create(*outText)
 	if err != nil {
@@ -182,4 +198,52 @@ func thousandGatewaysOneGatewayClass(capi *api.CompositeApi) ([]*suite.Delta, er
 		deltas = append(deltas, suite.NewDelta(suite.DeltaOpModify, capi.Gateway(), gw, patches...))
 	}
 	return deltas, nil
+}
+
+// create 1 gwclass, 1000 gateways and 10 routes/gateway
+func semiLarge(capi *api.CompositeApi) ([]*suite.Delta, error) {
+	if err := capi.GatewayClass().Create(context.Background(), &baseGatewayClass); err != nil {
+		return nil, err
+	}
+	if err := capi.Service().Create(context.Background(), &baseService); err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	for i := range 100 {
+		gw := baseGateway.DeepCopy()
+		gw.Name = fmt.Sprintf(baseGateway.Name, i)
+		if err := capi.Gateway().Create(context.Background(), gw); err != nil {
+			return nil, err
+		}
+	}
+	time.Sleep(2 * time.Second)
+	for i := range 1000 {
+		route := baseHttpRoute.DeepCopy()
+		route.Name = fmt.Sprintf(baseHttpRoute.Name, i)
+		route.Spec.Rules[0].BackendRefs[0].Name = gatewayv1.ObjectName(fmt.Sprintf(baseGateway.Name, i%1000))
+		if err := capi.HTTPRoute().Create(context.Background(), route); err != nil {
+			return nil, err
+		}
+	}
+	deltas := make([]*suite.Delta, 0, 100)
+	for i := range 100 {
+		route := baseHttpRoute.DeepCopy()
+		route.Name = fmt.Sprintf(baseHttpRoute.Name, i+10000)
+		patches := []patch.JsonPatch{
+			{
+				Op:   patch.PatchOpAdd,
+				Path: "/spec/hostnames",
+				Value: []string{
+					"new.example.com",
+				},
+			},
+		}
+		route.Spec.ParentRefs[0].Name = gatewayv1.ObjectName(fmt.Sprintf(baseGateway.Name, i))
+		deltas = append(deltas, suite.NewDelta(suite.DeltaOpAdd, capi.HTTPRoute(), route))
+		deltas = append(deltas, suite.NewDelta(suite.DeltaOpDelete, capi.HTTPRoute(), route))
+		deltas = append(deltas, suite.NewDelta(suite.DeltaOpAdd, capi.HTTPRoute(), route))
+		deltas = append(deltas, suite.NewDelta(suite.DeltaOpModify, capi.HTTPRoute(), route, patches...))
+	}
+	return deltas, nil
+
 }
