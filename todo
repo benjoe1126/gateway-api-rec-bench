@@ -1,0 +1,14 @@
+[] - profilinggal megnézni, hogy mi is történik
+[] - debug, mit csinál, ha módosul valami (translator)
+[] - 1 gw, kb 10 route/gw, növelgetni fokozatosan (nem kell egyesével)
+    [] - 1 db gateway hozzáad
+    [] - gateway módosít
+    [] - töröl
+    [] - megcsinálni mondjuk 100-szal
+[] - same base config
+    [] - gateway hozzá, nem mérjük
+    [] - route hozzáad, módosít, töröl
+[] - endpointok hozzáadása a servicekhez
+[] - nő a setup, idők hogy változnak
+[] - reconcile-t mérjük, translationt nem, tudni kell mérni ezt is
+    [] - van e translationnek metrikája, ha nem akkor valahogy megoldani

@@ -5,18 +5,18 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"onlab-bm/pkg/api"
 	"onlab-bm/pkg/metrics"
 	"onlab-bm/pkg/patch"
 	"onlab-bm/pkg/suite"
-	"os"
-	"path/filepath"
 	"time"
 
+	otelv1 "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
+	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	"google.golang.org/grpc"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/tools/clientcmd"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
@@ -129,7 +129,7 @@ var (
 )
 
 func main() {
-	flag.Parse()
+	/*flag.Parse()
 	kubeconfig := filepath.Join("tmp", "kubeconfig.yaml")
 	kc, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
@@ -144,7 +144,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println("existing routes: ", *routes[0].(*gatewayv1.HTTPRoute))*/
+	log.Println("existing routes: ", *routes[0].(*gatewayv1.HTTPRoute))
 	fetcher := metrics.NewFetcher(metricsUrl)
 	f := suiteNameToFunc[*testSuite]
 	if f == nil {
@@ -173,6 +173,32 @@ func main() {
 		of.WriteString("\n")
 		csv.WriteString(result.CSV())
 		csv.WriteString("\n")
+	}*/
+	/*
+		lis, err := net.Listen("tcp", ":19002") // OTLP gRPC default port
+		if err != nil {
+			log.Fatalf("failed to listen: %v", err)
+		}
+
+		grpcServer := grpc.NewServer()
+		collectortrace.RegisterTraceServiceServer(grpcServer, &metrics.OTELSink{})
+
+		log.Println("OTEL sink listening on :19002")
+		if err := grpcServer.Serve(lis); err != nil {
+			log.Fatalf("server error: %v", err)
+		}
+	*/
+	lis, err := net.Listen("tcp", fmt.Sprintf(":19002"))
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+	grpcServer := grpc.NewServer()
+	sink := &metrics.OTELSink{Ot: &metrics.V1OtelSink{}}
+	otelv1.RegisterMetricsServiceServer(grpcServer, sink.Ot)
+	tracev1.RegisterTraceServiceServer(grpcServer, sink)
+	log.Println("OTLP gRPC trace sink listening on :19002")
+	if err := grpcServer.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
 	}
 }
 
