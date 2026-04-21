@@ -31,11 +31,28 @@ func (dop DeltaOperation) String() string {
 	}
 }
 
+type DeltaHooks func(...any)
+
+type DeltaOpts func(d *Delta)
+
+func WithPatches(patches ...patch.JsonPatch) DeltaOpts {
+	return func(d *Delta) {
+		d.patches = patches
+	}
+}
+
+func WithHooks(hooks ...DeltaHooks) DeltaOpts {
+	return func(d *Delta) {
+		d.hooks = append(d.hooks, hooks...)
+	}
+}
+
 type Delta struct {
 	op          DeltaOperation
 	resourceApi api.GWV1Api
 	resource    api.GWV1Resource
 	patches     []patch.JsonPatch
+	hooks       []DeltaHooks
 }
 
 func (d *Delta) String() string {
@@ -94,11 +111,16 @@ func (d *Delta) Apply(ctx context.Context) error {
 	}
 }
 
-func NewDelta(op DeltaOperation, rapi api.GWV1Api, resource api.GWV1Resource, patches ...patch.JsonPatch) *Delta {
-	return &Delta{
+func NewDelta(op DeltaOperation, rapi api.GWV1Api, resource api.GWV1Resource, opts ...DeltaOpts) *Delta {
+	ret := &Delta{
 		op:          op,
 		resourceApi: rapi,
 		resource:    resource,
-		patches:     patches,
+		patches:     nil,
+		hooks:       nil,
 	}
+	for _, opt := range opts {
+		opt(ret)
+	}
+	return ret
 }

@@ -2,33 +2,67 @@ package metrics
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"net"
+	"time"
 
-	v1 "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
 	v1trace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
+	"google.golang.org/grpc"
 )
 
-type OTELSink struct {
-	Ot *V1OtelSink
+type OTELTraceSink struct {
 	v1trace.TraceServiceServer
+	traceChan chan *v1trace.ExportTraceServiceRequest
 }
 
-type V1OtelSink struct {
-	v1.MetricsServiceServer
-}
+type OtelTraceOpt func(*OTELTraceSink)
 
-func (ot *V1OtelSink) Export(ctx context.Context, req *v1.ExportMetricsServiceRequest) (*v1.ExportMetricsServiceResponse, error) {
-	for _, rs := range req.ResourceMetrics {
-		log.Println(rs.Resource)
+func WithTraceChannel(ch chan *v1trace.ExportTraceServiceRequest) OtelTraceOpt {
+	return func(o *OTELTraceSink) {
+		o.traceChan = ch
 	}
-	return &v1.ExportMetricsServiceResponse{}, nil
 }
 
-func (s *OTELSink) Export(ctx context.Context, req *v1trace.ExportTraceServiceRequest) (*v1trace.ExportTraceServiceResponse, error) {
-	for _, s := range req.ResourceSpans {
-		logResourceSpans(s)
+func NewOTELTraceSink(opts ...OtelTraceOpt) *OTELTraceSink {
+	ret := &OTELTraceSink{
+		traceChan: make(chan *v1trace.ExportTraceServiceRequest),
 	}
+	for _, o := range opts {
+		o(ret)
+	}
+	return ret
+}
+
+func (s *OTELTraceSink) Start(ctx context.Context, port uint16) error {
+	lis, err := net.Listen("tcp", fmt.Sprintf(":19002"))
+	if err != nil {
+		return err
+	}
+	grpcServer := grpc.NewServer()
+	v1trace.RegisterTraceServiceServer(grpcServer, s)
+	log.Println("OTLP gRPC trace sink listening on :19002")
+	errchan := make(chan error)
+	go func() {
+		errchan <- grpcServer.Serve(lis)
+	}()
+	go func() {
+		select {
+		case <-ctx.Done():
+			grpcServer.GracefulStop()
+		case err := <-errchan:
+			log.Fatalf("OTLP gRPC trace sink error: %v", err)
+		}
+	}()
+	return nil
+}
+
+func (s *OTELTraceSink) Export(ctx context.Context, req *v1trace.ExportTraceServiceRequest) (*v1trace.ExportTraceServiceResponse, error) {
+	for _, r := range req.ResourceSpans {
+		logResourceSpans(r)
+	}
+	s.traceChan <- req
 	return &v1trace.ExportTraceServiceResponse{}, nil
 }
 
@@ -36,12 +70,11 @@ func logResourceSpans(rs *tracepb.ResourceSpans) {
 	for _, ils := range rs.ScopeSpans {
 		for _, span := range ils.Spans {
 			log.Printf(
-				"trace_id=%x span_id=%x name=%s start=%d end=%d",
+				"trace_id=%x span_id=%x name=%s duration=%s",
 				span.TraceId,
 				span.SpanId,
 				span.Name,
-				span.StartTimeUnixNano,
-				span.EndTimeUnixNano,
+				(time.Nanosecond * (time.Duration(span.EndTimeUnixNano) - time.Duration(span.StartTimeUnixNano))).String(),
 			)
 		}
 	}
