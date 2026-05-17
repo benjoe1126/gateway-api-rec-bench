@@ -36,16 +36,17 @@ func NewOTELTraceSink(opts ...OtelTraceOpt) *OTELTraceSink {
 }
 
 func (s *OTELTraceSink) Start(ctx context.Context, port uint16) error {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":19002"))
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return err
 	}
 	grpcServer := grpc.NewServer()
 	v1trace.RegisterTraceServiceServer(grpcServer, s)
-	log.Println("OTLP gRPC trace sink listening on :19002")
 	errchan := make(chan error)
 	go func() {
+		log.Println("OTLP gRPC trace sink listening on :19002")
 		errchan <- grpcServer.Serve(lis)
+		log.Println("OTLP gRPC trace sink stopped")
 	}()
 	go func() {
 		select {
@@ -59,9 +60,9 @@ func (s *OTELTraceSink) Start(ctx context.Context, port uint16) error {
 }
 
 func (s *OTELTraceSink) Export(ctx context.Context, req *v1trace.ExportTraceServiceRequest) (*v1trace.ExportTraceServiceResponse, error) {
-	for _, r := range req.ResourceSpans {
+	/*	for _, r := range req.ResourceSpans {
 		logResourceSpans(r)
-	}
+	}*/
 	s.traceChan <- req
 	return &v1trace.ExportTraceServiceResponse{}, nil
 }

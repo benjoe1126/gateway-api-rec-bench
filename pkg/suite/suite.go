@@ -8,11 +8,11 @@ import (
 )
 
 type Suite struct {
-	deltas  []*Delta
+	deltas  []DeltaInterface
 	fetcher *metrics.Fetcher
 }
 
-func New(fetcher *metrics.Fetcher, deltas ...*Delta) *Suite {
+func New(fetcher *metrics.Fetcher, deltas ...DeltaInterface) *Suite {
 	return &Suite{
 		deltas:  deltas,
 		fetcher: fetcher,
@@ -47,6 +47,18 @@ delta: %s
 	return fmt.Sprintf(resultString, d.numGatewayclass, d.numGateways, d.numHttpRoutes, d.numServices, d.reconcileTime, d.status, d.delta)
 }
 
+func (s *Suite) WalkthroughDeltaForTraces(notiChan <-chan struct{}) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	for _, d := range s.deltas {
+		log.Println("Applying delta ", d.String())
+		if err := d.Apply(ctx); err != nil {
+			log.Println("Error applying delta ", d.String(), err)
+		}
+		<-notiChan
+	}
+}
+
 func (s *Suite) WalkThroughDeltas() []*DeltaReconcileResult {
 	ret := make([]*DeltaReconcileResult, 0, len(s.deltas))
 	var (
@@ -76,9 +88,9 @@ func (s *Suite) WalkThroughDeltas() []*DeltaReconcileResult {
 			continue
 		}
 		adder := 0
-		if d.op == DeltaOpAdd {
+		if d.Operation() == DeltaOpAdd {
 			adder++
-		} else if d.op == DeltaOpDelete {
+		} else if d.Operation() == DeltaOpDelete {
 			adder--
 		}
 		switch d.UnderlyingType() {

@@ -12,3 +12,20 @@
 [] - nő a setup, idők hogy változnak
 [] - reconcile-t mérjük, translationt nem, tudni kell mérni ezt is
     [] - van e translationnek metrikája, ha nem akkor valahogy megoldani
+-------------------------------- 2026.04.22 ---------------------------------------------------
+[] - readd nem fog kelleni
+[] - egyre nagyobb base configok (akár exp) és mindig 1 db add, modify, delete kör, ebből pár száz
+[] - mennyire számít a base config mérete? (rendes delta api-nál nem kéne számítania a base config méretétől)
+[] - mi a trend?
+[] - baseline 1 db config
+[] - legyen 1 gyilkos config, csak legyen tls secret, routeokhoz is svc, endpoint, stb.
+    [] - többfajta delta, maradhat a hostname is, de pl. route változik, egy tls secret változik
+-------------------------------- 2026.05.07 -----------------------------------------------------
+[] - Controller-runtime client, élhetőbb
+[] - tracek nem kontrolálhatók batch frissítéseknél
+[] - apply delta -> wait condition (betolni egy watchot mondjuk a gateway statusnál) -> bevárni minden gatewayt ready-be -> kérni egy exportot, számon tartani a kommulatív különbséget
+[] - translate metrikát hozzávenni - PRIORITY
+[] - abstractot összeszedni, munkát motiválni , benchmarkos readme-re visszautalni, scaling k8s to x nodes még motivációnak (kubecon)
+[] - már meglévő benchmarkról beszámolni, rövid összefoglalás, célkitűzés, methodológia, elméleti alapozás, konkrét implementáció, evaluation
+[] - TMIT beszámoló templatet felcsapni, abstractot és címet átdobni
+[] - ha nem jön össze akkor work in progress

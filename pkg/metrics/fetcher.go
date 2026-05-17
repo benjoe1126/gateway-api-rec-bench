@@ -15,6 +15,8 @@ import (
 const (
 	reconcileTimeMetric        = "controller_runtime_reconcile_time_seconds"
 	successfulReconcileMetrics = "controller_runtime_reconcile_total"
+	translationTimeMetric      = "translator_translation_duration"
+	translationCountMetric     = "translator_translation_count"
 )
 
 type Fetcher struct {
@@ -62,6 +64,21 @@ func (f *Fetcher) WaitForSuccessfulReconcile(ctx context.Context, ch chan<- Reco
 	}
 }
 
+func (f *Fetcher) MustFetchTranslationCountMetric() float64 {
+	metric, err := f.FetchTranslationCountMetric()
+	if err != nil {
+		log.Fatalf("failed to fetch translation count: %s", err)
+	}
+	return metric
+}
+func (f *Fetcher) FetchTranslationCountMetric() (float64, error) {
+	metric, err := fetchAndFilterMetric(f.metricsURL, translationCountMetric)
+	if err != nil {
+		return 0, err
+	}
+	return getMetricValue(metric.Metric[0]), nil
+}
+
 func (f *Fetcher) MustFetchReconcileTimeSecondsMetric() float64 {
 	ret, err := f.FetchReconcileTimeMetric()
 	if err != nil {
@@ -84,6 +101,22 @@ func (f *Fetcher) MustFetchSuccessfulReconcileMetric() int {
 		panic(err)
 	}
 	return ret
+}
+
+func (f *Fetcher) MustFetchTranslationTimeMetric() float64 {
+	ret, err := f.FetchTranslationTimeMetric()
+	if err != nil {
+		panic(err)
+	}
+	return ret
+}
+
+func (f *Fetcher) FetchTranslationTimeMetric() (float64, error) {
+	metrics, err := fetchAndFilterMetric(f.metricsURL, translationTimeMetric)
+	if err != nil {
+		return 0, err
+	}
+	return getMetricValue(metrics.Metric[0]), nil
 }
 
 func (f *Fetcher) FetchSuccessfulReconcileMetric() (int, error) {

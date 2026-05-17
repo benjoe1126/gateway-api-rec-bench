@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"onlab-bm/pkg/api"
 	"onlab-bm/pkg/patch"
+	"strings"
 
 	v1 "k8s.io/api/core/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -47,12 +48,54 @@ func WithHooks(hooks ...DeltaHooks) DeltaOpts {
 	}
 }
 
+type DeltaInterface interface {
+	Apply(ctx context.Context) error
+	UnderlyingType() DeltaUnderlyingType
+	String() string
+	Operation() DeltaOperation
+}
+
+type CompositeDelta struct {
+	deltas []DeltaInterface
+}
+
+func NewCompositeDelta(deltas ...DeltaInterface) *CompositeDelta {
+	return &CompositeDelta{deltas}
+}
+func (d *CompositeDelta) Operation() DeltaOperation {
+	return d.deltas[0].Operation()
+}
+
+func (d *CompositeDelta) String() string {
+	res := make([]string, 0, len(d.deltas))
+	for _, ds := range d.deltas {
+		res = append(res, ds.String())
+	}
+	return strings.Join(res, "\n")
+}
+func (d *CompositeDelta) Apply(ctx context.Context) error {
+	for _, ds := range d.deltas {
+		if err := ds.Apply(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (d *CompositeDelta) UnderlyingType() DeltaUnderlyingType {
+	return d.deltas[0].UnderlyingType()
+}
+
 type Delta struct {
 	op          DeltaOperation
 	resourceApi api.GWV1Api
 	resource    api.GWV1Resource
 	patches     []patch.JsonPatch
 	hooks       []DeltaHooks
+}
+
+func (d *Delta) Operation() DeltaOperation {
+	return d.op
 }
 
 func (d *Delta) String() string {
@@ -99,6 +142,11 @@ func (d *Delta) UnderlyingType() DeltaUnderlyingType {
 func (d *Delta) Apply(ctx context.Context) error {
 	name := d.resource.GetName()
 	namespace := d.resource.GetNamespace()
+	defer func() {
+		for _, h := range d.hooks {
+			h()
+		}
+	}()
 	switch d.op {
 	case DeltaOpAdd:
 		return d.resourceApi.Create(ctx, d.resource)

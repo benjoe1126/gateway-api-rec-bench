@@ -5,20 +5,23 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net"
+	"math"
 	"onlab-bm/pkg/api"
 	"onlab-bm/pkg/metrics"
 	"onlab-bm/pkg/patch"
 	"onlab-bm/pkg/suite"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
-	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/tools/clientcmd"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
@@ -121,24 +124,28 @@ var (
 )
 
 var (
-	testSuite       = flag.String("suite", "default", "suite to run")
-	outText         = flag.String("output-text", "results", "text for output")
-	outCSV          = flag.String("output-csv", "results.csv", "csv for output")
-	suiteNameToFunc = map[string]func(compositeApi *api.CompositeApi) ([]*suite.Delta, error){
+	testSuite        = flag.String("suite", "default", "suite to run")
+	outText          = flag.String("output-text", "results", "text for output")
+	outCSV           = flag.String("output-csv", "results.csv", "csv for output")
+	baseGatewayCount = flag.Int("base-gateway-count", 1, "number of gateways")
+	suiteNameToFunc  = map[string]func(compositeApi *api.CompositeApi) ([]suite.DeltaInterface, error){
 		"thousandGatewaysOneGatewayClass": thousandGatewaysOneGatewayClass,
 		"semiLarge":                       semiLarge,
+		"correctnessCheck":                correctnessCheck,
+		"withExponentialIncrease":         withExponentialIncrease,
+		"flagBasedBaseConfig":             flagBasedBaseConfig,
 	}
 )
 
 var (
-	globalGatewayClassCount = 0
-	globalGatewayCount      = 0
-	globalHTTPRouteCount    = 0
-	globalSVCCount          = 0
+	globalGatewayClassCount = atomic.Int64{}
+	globalGatewayCount      = atomic.Int64{}
+	globalHTTPRouteCount    = atomic.Int64{}
+	globalSVCCount          = atomic.Int64{}
 )
 
 func main() {
-	/*flag.Parse()
+	flag.Parse()
 	kubeconfig := filepath.Join("tmp", "kubeconfig.yaml")
 	kc, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
@@ -149,11 +156,6 @@ func main() {
 		log.Fatal(err)
 	}
 	capi := api.NewCompositeApi(client)
-	/*routes, err := capi.HTTPRoute().List(context.Background(), "default")
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Println("existing routes: ", *routes[0].(*gatewayv1.HTTPRoute))
 	fetcher := metrics.NewFetcher(metricsUrl)
 	f := suiteNameToFunc[*testSuite]
 	if f == nil {
@@ -165,45 +167,24 @@ func main() {
 	}
 	bmSuite := suite.New(fetcher, deltas...)
 	// wait a bit for initial reconciles
-	time.Sleep(4 * time.Second)
-	results := bmSuite.WalkThroughDeltas()
-	of, err := os.Create(*outText)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer of.Close()
-	csv, err := os.Create(*outCSV)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer csv.Close()
-	for _, result := range results {
-		of.WriteString(result.String())
-		of.WriteString("\n")
-		csv.WriteString(result.CSV())
-		csv.WriteString("\n")
-	}*/
-	lis, err := net.Listen("tcp", fmt.Sprintf(":19002"))
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
-	grpcServer := grpc.NewServer()
-	traceChan := make(chan *tracev1.ExportTraceServiceRequest, 100)
-	sink := metrics.NewOTELTraceSink(metrics.WithTraceChannel(traceChan))
+	time.Sleep(5 * time.Second)
+	//traceChan := make(chan *tracev1.ExportTraceServiceRequest, 100)
+	//sink := metrics.NewOTELTraceSink(metrics.WithTraceChannel(traceChan))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
 		cancel()
-		time.Sleep(5 * time.Second) // wait for background task to finish running
+		time.Sleep(2 * time.Second) // wait for background task to finish running
 	}()
-	if err := sink.Start(ctx, 19002); err != nil {
-		log.Fatalf("failed to start trace sink: %v", err)
-	}
-	go traceConsumePipeline(ctx, traceChan)
-	log.Println("OTLP gRPC trace sink listening on :19002")
-	if err := grpcServer.Serve(lis); err != nil {
-		cancel()
-		log.Fatalf("failed to serve: %v", err)
-	}
+	//if err := sink.Start(ctx, 19002); err != nil {
+	//	log.Fatalf("failed to start trace sink: %v", err)
+	//}
+	nchan := make(chan struct{}, 100)
+	//go traceConsumePipeline(ctx, traceChan, nchan)
+	go watchAndCalculate(ctx, client, fetcher, nchan)
+	time.Sleep(2 * time.Second)
+	bmSuite.WalkthroughDeltaForTraces(nchan)
+	time.Sleep(3 * time.Second)
+	cancel()
 }
 
 type TraceResult struct {
@@ -216,20 +197,32 @@ type TraceResult struct {
 	TotalTime         time.Duration `yaml:"totalTime"`
 }
 
-func (tr *TraceResult) CSV() string {
-	return fmt.Sprintf("%d,%d,%d,%d,%d,%d,%d", tr.NumGatewayClasses, tr.NumGateways, tr.NumHTTPRoutes, tr.NumServices, tr.ReconcileTime.Milliseconds(), tr.TranslationTime.Milliseconds(), tr.TotalTime.Milliseconds())
-}
-
-func tracesToCSV(traces []TraceResult) string {
-	result := ""
-	for _, trace := range traces {
-		result += trace.CSV() + "\n"
+func watchAndCalculate(ctx context.Context, cl *dynamic.DynamicClient, fetcher *metrics.Fetcher, notificationChan chan struct{}) {
+	reconcileTime := fetcher.MustFetchReconcileTimeSecondsMetric()
+	translationTime := fetcher.MustFetchTranslationTimeMetric()
+	//currentTransCountMetric := fetcher.MustFetchTranslationCountMetric()
+	type times struct {
+		translationTime float64
+		reconcileTime   float64
 	}
-	return result
-}
-
-func traceConsumePipeline(ctx context.Context, traceChan chan *tracev1.ExportTraceServiceRequest) {
-
+	newTimes := make(chan times, 4)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				transTimeNew := fetcher.MustFetchTranslationTimeMetric()
+				recTimeNew := fetcher.MustFetchReconcileTimeSecondsMetric()
+				if transTimeNew != translationTime {
+					newTimes <- times{
+						translationTime: transTimeNew,
+						reconcileTime:   recTimeNew,
+					}
+				}
+			}
+		}
+	}()
 	results := make([]TraceResult, 0, 1000)
 	for {
 		select {
@@ -247,6 +240,65 @@ func traceConsumePipeline(ctx context.Context, traceChan chan *tracev1.ExportTra
 			outBytes, _ := yaml.Marshal(results)
 			of.Write(outBytes)
 			ocsv.WriteString(tracesToCSV(results))
+			notificationChan <- struct{}{}
+			return
+		case nTimes := <-newTimes:
+			log.Println("Times are: ", reconcileTime, translationTime)
+			newRecTime := nTimes.reconcileTime
+			newTransTime := nTimes.translationTime
+			log.Println("New times are: ", newRecTime, newTransTime)
+			diffRecTime := time.Duration((newRecTime - reconcileTime) * float64(time.Second))
+			diffTransTime := time.Duration((newTransTime - translationTime) * float64(time.Second))
+			log.Println("Diff times are: ", diffRecTime, diffTransTime)
+			reconcileTime = newRecTime
+			translationTime = newTransTime
+			results = append(results, TraceResult{
+				NumGateways:       int(globalGatewayCount.Load()),
+				NumHTTPRoutes:     int(globalHTTPRouteCount.Load()),
+				NumGatewayClasses: int(globalGatewayClassCount.Load()),
+				NumServices:       int(globalSVCCount.Load()),
+				ReconcileTime:     diffRecTime,
+				TranslationTime:   diffTransTime,
+				TotalTime:         diffRecTime + diffTransTime,
+			})
+			notificationChan <- struct{}{}
+		}
+	}
+
+}
+
+func (tr *TraceResult) CSV() string {
+	return fmt.Sprintf("%d,%d,%d,%d,%d,%d,%d", tr.NumGatewayClasses, tr.NumGateways, tr.NumHTTPRoutes, tr.NumServices, tr.ReconcileTime.Microseconds(), tr.TranslationTime.Microseconds(), tr.TotalTime.Microseconds())
+}
+
+func tracesToCSV(traces []TraceResult) string {
+	result := ""
+	for _, trace := range traces {
+		result += trace.CSV() + "\n"
+	}
+	return result
+}
+
+func traceConsumePipeline(ctx context.Context, traceChan chan *tracev1.ExportTraceServiceRequest, notiChan chan<- struct{}) {
+	log.Println("starting trace consume pipeline")
+	results := make([]TraceResult, 0, 1000)
+	for {
+		select {
+		case <-ctx.Done():
+			of, err := os.Create(*outText)
+			if err != nil {
+				log.Fatalf("failed to create output file: %v", err)
+			}
+			defer of.Close()
+			ocsv, err := os.Create(*outCSV)
+			if err != nil {
+				log.Fatalf("failed to create output file: %v", err)
+			}
+			defer ocsv.Close()
+			outBytes, _ := yaml.Marshal(results)
+			of.Write(outBytes)
+			ocsv.WriteString(tracesToCSV(results))
+			return
 
 		case trace := <-traceChan:
 			recTime := time.Duration(0)
@@ -256,46 +308,94 @@ func traceConsumePipeline(ctx context.Context, traceChan chan *tracev1.ExportTra
 				for _, sspan := range rspan.ScopeSpans {
 					for _, span := range sspan.Spans {
 						if strings.HasPrefix(span.Name, "GatewayAPIReconciler.Reconcile") {
-							recTime = time.Nanosecond * time.Duration(span.GetEndTimeUnixNano()-span.GetStartTimeUnixNano())
-						} else if strings.HasPrefix(span.Name, "GatewayAPIReconciler.Reconcile") {
-							transTime = time.Nanosecond * time.Duration(span.GetEndTimeUnixNano()-span.GetStartTimeUnixNano())
+							recTime = time.Duration(span.GetEndTimeUnixNano() - span.GetStartTimeUnixNano())
+							log.Printf("span: %s took %v to reconcile", span.Name, recTime)
+						} else if strings.Contains(span.Name, "GatewayApiRunner.subscribeAndTranslate") {
+							transTime = time.Duration(span.GetEndTimeUnixNano() - span.GetStartTimeUnixNano())
+							log.Printf("span: %s took %v to translate", span.Name, transTime)
 						}
 					}
 					totalTime = transTime + recTime
-					results = append(results, TraceResult{
-						NumGateways:       globalGatewayClassCount,
-						NumHTTPRoutes:     globalHTTPRouteCount,
-						NumGatewayClasses: globalGatewayClassCount,
-						NumServices:       globalSVCCount,
-						ReconcileTime:     recTime,
-						TranslationTime:   transTime,
-						TotalTime:         totalTime,
-					})
 				}
 			}
+			log.Println(globalGatewayClassCount.Load(), globalGatewayCount.Load(), globalHTTPRouteCount.Load(), globalSVCCount.Load())
+			results = append(results, TraceResult{
+				NumGateways:       int(globalGatewayCount.Load()),
+				NumHTTPRoutes:     int(globalHTTPRouteCount.Load()),
+				NumGatewayClasses: int(globalGatewayClassCount.Load()),
+				NumServices:       int(globalSVCCount.Load()),
+				ReconcileTime:     recTime,
+				TranslationTime:   transTime,
+				TotalTime:         totalTime,
+			})
+			log.Println("finished consumption for now, sending message to notification pipeline")
+			notiChan <- struct{}{}
 		}
 	}
 }
 
-func thousandGatewaysOneGatewayClass(capi *api.CompositeApi) ([]*suite.Delta, error) {
+var resourceBatchCounter = atomic.Int64{}
+
+func bachCounterIncHook(at *atomic.Int64) func(...any) {
+	return func(_ ...any) {
+		at.Add(1)
+	}
+}
+
+func modHook(at *atomic.Int64, diff int64) func(...any) {
+	return func(a ...any) {
+		at.Add(diff)
+	}
+}
+
+func flagBasedBaseConfig(capi *api.CompositeApi) ([]suite.DeltaInterface, error) {
 	if err := capi.GatewayClass().Create(context.Background(), &baseGatewayClass); err != nil {
 		return nil, err
 	}
-	globalGatewayClassCount++
-	deltas := make([]*suite.Delta, 0, 8000)
+	globalGatewayClassCount.Add(1)
+	if err := capi.Service().Create(context.Background(), &baseService); err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	for i := range *baseGatewayCount {
+		globalGatewayCount.Add(1)
+		gw := baseGateway.DeepCopy()
+		gw.Name = fmt.Sprintf(baseGateway.Name, i)
+		if err := capi.Gateway().Create(context.Background(), gw); err != nil {
+			return nil, err
+		}
+	}
+	gw := baseGateway.DeepCopy()
+	gw.Name = fmt.Sprintf(baseGateway.Name, globalGatewayCount.Load()+5)
+	deltas := make([]suite.DeltaInterface, 0, 4)
+	deltas = append(deltas, suite.NewDelta(suite.DeltaOpAdd, capi.Gateway(), gw, suite.WithHooks(modHook(&globalGatewayCount, 1))))
+	deltas = append(deltas, suite.NewDelta(suite.DeltaOpDelete, capi.Gateway(), gw, suite.WithHooks(modHook(&globalGatewayCount, -1))))
+	deltas = append(deltas, suite.NewDelta(suite.DeltaOpAdd, capi.Gateway(), gw, suite.WithHooks(modHook(&globalGatewayCount, 1))))
+	patches := []patch.JsonPatch{
+		{
+			Op:    "add",
+			Path:  "/spec/listeners/0/port",
+			Value: 8080,
+		},
+	}
+	deltas = append(deltas, suite.NewDelta(suite.DeltaOpModify, capi.Gateway(), gw, suite.WithPatches(patches...)))
+	return deltas, nil
+
+}
+
+func thousandGatewaysOneGatewayClass(capi *api.CompositeApi) ([]suite.DeltaInterface, error) {
+	if err := capi.GatewayClass().Create(context.Background(), &baseGatewayClass); err != nil {
+		return nil, err
+	}
+	globalGatewayClassCount.Add(1)
+	deltas := make([]suite.DeltaInterface, 0, 8000)
 	//first we add 1000 gateways, delete each, readd them, then modify it slightly
 	for i := range 1000 {
 		gw := baseGateway.DeepCopy()
 		gw.Name = fmt.Sprintf(baseGateway.Name, i)
-		deltas = append(deltas, suite.NewDelta(suite.DeltaOpAdd, capi.Gateway(), gw, suite.WithHooks(func(...any) {
-			globalGatewayCount++
-		})))
-		deltas = append(deltas, suite.NewDelta(suite.DeltaOpDelete, capi.Gateway(), gw, suite.WithHooks(func(...any) {
-			globalGatewayCount--
-		})))
-		deltas = append(deltas, suite.NewDelta(suite.DeltaOpAdd, capi.Gateway(), gw, suite.WithHooks(func(...any) {
-			globalGatewayCount++
-		})))
+		deltas = append(deltas, suite.NewDelta(suite.DeltaOpAdd, capi.Gateway(), gw, suite.WithHooks(modHook(&globalGatewayCount, 1))))
+		deltas = append(deltas, suite.NewDelta(suite.DeltaOpDelete, capi.Gateway(), gw, suite.WithHooks(modHook(&globalGatewayCount, -1))))
+		deltas = append(deltas, suite.NewDelta(suite.DeltaOpAdd, capi.Gateway(), gw, suite.WithHooks(modHook(&globalGatewayCount, 1))))
 		patches := []patch.JsonPatch{
 			{
 				Op:    "add",
@@ -308,8 +408,42 @@ func thousandGatewaysOneGatewayClass(capi *api.CompositeApi) ([]*suite.Delta, er
 	return deltas, nil
 }
 
+func withExponentialIncrease(capi *api.CompositeApi) ([]suite.DeltaInterface, error) {
+	//base is 1 gatewayclass, 1 gateway, and 1 route
+	// adding in 2^i gateways with each delta
+	if err := capi.GatewayClass().Create(context.Background(), &baseGatewayClass); err != nil {
+		return nil, err
+	}
+	globalGatewayClassCount.Add(1)
+	if err := capi.Service().Create(context.Background(), &baseService); err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	globalSVCCount.Add(1)
+	globalGatewayCount.Add(1)
+	gwTmp := baseGateway.DeepCopy()
+	gwTmp.Name = fmt.Sprintf(baseGateway.Name, 0)
+	if err := capi.Gateway().Create(context.Background(), gwTmp); err != nil {
+		return nil, err
+	}
+	deltas := make([]suite.DeltaInterface, 0, 10)
+	gwCount := 1
+	for i := range 10 {
+		deltasTmp := make([]suite.DeltaInterface, 0, 10)
+		for range int64(math.Pow(2, float64(i))) {
+			gw := baseGateway.DeepCopy()
+			gw.Name = fmt.Sprintf(baseGateway.Name, gwCount)
+			gwCount++
+			deltasTmp = append(deltasTmp, suite.NewDelta(suite.DeltaOpAdd, capi.Gateway(), gw, suite.WithHooks(bachCounterIncHook(&resourceBatchCounter), modHook(&globalGatewayCount, 1))))
+		}
+		cDelta := suite.NewCompositeDelta(deltasTmp...)
+		deltas = append(deltas, cDelta)
+	}
+	return deltas, nil
+}
+
 // create 1 gwclass, 1000 gateways and 10 routes/gateway
-func semiLarge(capi *api.CompositeApi) ([]*suite.Delta, error) {
+func semiLarge(capi *api.CompositeApi) ([]suite.DeltaInterface, error) {
 	if err := capi.GatewayClass().Create(context.Background(), &baseGatewayClass); err != nil {
 		return nil, err
 	}
@@ -318,7 +452,7 @@ func semiLarge(capi *api.CompositeApi) ([]*suite.Delta, error) {
 		return nil, err
 	}
 	for i := range 100 {
-		globalGatewayCount++
+		globalGatewayCount.Add(1)
 		gw := baseGateway.DeepCopy()
 		gw.Name = fmt.Sprintf(baseGateway.Name, i)
 		if err := capi.Gateway().Create(context.Background(), gw); err != nil {
@@ -327,7 +461,7 @@ func semiLarge(capi *api.CompositeApi) ([]*suite.Delta, error) {
 	}
 	time.Sleep(2 * time.Second)
 	for i := range 1000 {
-		globalHTTPRouteCount++
+		globalHTTPRouteCount.Add(1)
 		route := baseHttpRoute.DeepCopy()
 		route.Name = fmt.Sprintf(baseHttpRoute.Name, i)
 		route.Spec.Rules[0].BackendRefs[0].Name = gatewayv1.ObjectName(fmt.Sprintf(baseGateway.Name, i%1000))
@@ -335,7 +469,7 @@ func semiLarge(capi *api.CompositeApi) ([]*suite.Delta, error) {
 			return nil, err
 		}
 	}
-	deltas := make([]*suite.Delta, 0, 100)
+	deltas := make([]suite.DeltaInterface, 0, 100)
 	for i := range 100 {
 		route := baseHttpRoute.DeepCopy()
 		route.Name = fmt.Sprintf(baseHttpRoute.Name, i+10000)
@@ -349,17 +483,39 @@ func semiLarge(capi *api.CompositeApi) ([]*suite.Delta, error) {
 			},
 		}
 		route.Spec.ParentRefs[0].Name = gatewayv1.ObjectName(fmt.Sprintf(baseGateway.Name, i))
-		deltas = append(deltas, suite.NewDelta(suite.DeltaOpAdd, capi.HTTPRoute(), route, suite.WithHooks(func(...any) {
-			globalHTTPRouteCount++
-		})))
-		deltas = append(deltas, suite.NewDelta(suite.DeltaOpDelete, capi.HTTPRoute(), route, suite.WithHooks(func(...any) {
-			globalHTTPRouteCount--
-		})))
-		deltas = append(deltas, suite.NewDelta(suite.DeltaOpAdd, capi.HTTPRoute(), route, suite.WithHooks(func(...any) {
-			globalHTTPRouteCount++
-		})))
+		deltas = append(deltas, suite.NewDelta(suite.DeltaOpAdd, capi.HTTPRoute(), route, suite.WithHooks(modHook(&globalHTTPRouteCount, 1))))
+		deltas = append(deltas, suite.NewDelta(suite.DeltaOpDelete, capi.HTTPRoute(), route, suite.WithHooks(modHook(&globalHTTPRouteCount, -1))))
+		deltas = append(deltas, suite.NewDelta(suite.DeltaOpAdd, capi.HTTPRoute(), route, suite.WithHooks(modHook(&globalHTTPRouteCount, 1))))
 		deltas = append(deltas, suite.NewDelta(suite.DeltaOpModify, capi.HTTPRoute(), route, suite.WithPatches(patches...)))
 	}
 	return deltas, nil
 
+}
+
+func correctnessCheck(capi *api.CompositeApi) ([]suite.DeltaInterface, error) {
+	if err := capi.GatewayClass().Create(context.Background(), &baseGatewayClass); err != nil {
+		return nil, err
+	}
+	globalGatewayClassCount.Add(1)
+	if err := capi.Service().Create(context.Background(), &baseService); err != nil {
+		return nil, err
+	}
+	globalSVCCount.Add(1)
+	deltas := make([]suite.DeltaInterface, 0, 10)
+	for i := range 10 {
+		gw := baseGateway.DeepCopy()
+		gw.Name = fmt.Sprintf(baseGateway.Name, i)
+		deltas = append(deltas, suite.NewDelta(suite.DeltaOpAdd, capi.Gateway(), gw, suite.WithHooks(modHook(&globalGatewayCount, 1))))
+		deltas = append(deltas, suite.NewDelta(suite.DeltaOpDelete, capi.Gateway(), gw, suite.WithHooks(modHook(&globalGatewayCount, -1))))
+		deltas = append(deltas, suite.NewDelta(suite.DeltaOpAdd, capi.Gateway(), gw, suite.WithHooks(modHook(&globalGatewayCount, 1))))
+		patches := []patch.JsonPatch{
+			{
+				Op:    "add",
+				Path:  "/spec/listeners/0/port",
+				Value: 8080,
+			},
+		}
+		deltas = append(deltas, suite.NewDelta(suite.DeltaOpModify, capi.Gateway(), gw, suite.WithPatches(patches...)))
+	}
+	return deltas, nil
 }

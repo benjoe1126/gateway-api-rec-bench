@@ -5,14 +5,19 @@ gateway:
 admin:
   enablePprof: true
 telemetry:
-  traces:
-    sink:
-      type: OpenTelemetry
-      openTelemetry:
-        host: localhost
-        protocol: grpc
-        port: 19002
+  #traces:
+  #  sink:
+  #    type: OpenTelemetry
+  #    openTelemetry:
+  #      host: localhost
+  #      protocol: grpc
+  #      port: 19002
   metrics:
+    #sinks:
+    #  - openTelemetry:
+    #      host: localhost
+    #      protocol: grpc
+    #      port: 19002
     prometheus:
       disable: false
 provider:
