@@ -12,8 +12,8 @@ const (
 )
 
 type JsonPatch struct {
-	Op    JsonPatchOp `json:"op"`
-	From  string      `json:"from,omitempty"`
-	Path  string      `json:"path"`
-	Value interface{} `json:"value,omitempty"`
+	Op    JsonPatchOp `json:"op" yaml:"op"`
+	From  string      `json:"from,omitempty" yaml:"from,omitempty"`
+	Path  string      `json:"path" yaml:"path"`
+	Value interface{} `json:"value,omitempty" yaml:"value,omitempty"`
 }

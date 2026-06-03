@@ -9,9 +9,9 @@ import (
 	"onlab-bm/pkg/api"
 	"onlab-bm/pkg/metrics"
 	"onlab-bm/pkg/patch"
+	"onlab-bm/pkg/scenario"
 	"onlab-bm/pkg/suite"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -21,7 +21,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/tools/clientcmd"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
@@ -143,10 +142,28 @@ var (
 	globalHTTPRouteCount    = atomic.Int64{}
 	globalSVCCount          = atomic.Int64{}
 )
+var scTemplate = `
+name: test-scenario-{{ .index }}
+description: Description for test-scenario-{{ .index }}
+resources:
+  gateways:
+    count: {{ .count }}
+deltas: []
+initialDelay: {{ .delay }}
+`
 
 func main() {
 	flag.Parse()
-	kubeconfig := filepath.Join("tmp", "kubeconfig.yaml")
+	scg := scenario.ScenarioGenerator{
+		ScenarioTemplate: scTemplate,
+		Values: map[string]interface{}{
+			"index": 0,
+			"count": 3,
+			"delay": "1s",
+		},
+	}
+	fmt.Println(scg.Generate())
+	/*kubeconfig := filepath.Join("tmp", "kubeconfig.yaml")
 	kc, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
 		log.Fatal(err)
@@ -154,8 +171,9 @@ func main() {
 	client, err := dynamic.NewForConfig(kc)
 	if err != nil {
 		log.Fatal(err)
-	}
-	capi := api.NewCompositeApi(client)
+	}*/
+
+	/*capi := api.NewCompositeApi(client)
 	fetcher := metrics.NewFetcher(metricsUrl)
 	f := suiteNameToFunc[*testSuite]
 	if f == nil {
@@ -184,7 +202,7 @@ func main() {
 	time.Sleep(2 * time.Second)
 	bmSuite.WalkthroughDeltaForTraces(nchan)
 	time.Sleep(3 * time.Second)
-	cancel()
+	cancel()*/
 }
 
 type TraceResult struct {
