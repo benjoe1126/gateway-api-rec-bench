@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"html/template"
 	"log"
-	"onlab-bm/pkg/patch"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -17,10 +16,6 @@ type ScenarioGenerator struct {
 }
 
 func (s *ScenarioGenerator) Generate() ([]Scenario, error) {
-	/*	yamlString, err := yaml.Marshal(s.ScenarioTemplate)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal scenario template: %w", err)
-		}*/
 	tpl := template.New("scenarioGenerator")
 	tpl, err := tpl.Parse(string(s.ScenarioTemplate))
 	if err != nil {
@@ -52,9 +47,9 @@ type ScenarioTemplate struct {
 }
 
 type Scenario struct {
-	Name         string            `yaml:"name"`
-	Description  string            `yaml:"description,omitempty"`
-	Resources    Resources         `yaml:"resources"`
-	Deltas       []patch.JsonPatch `yaml:"deltas"`
-	InitialDelay time.Duration     `yaml:"initialDelay,omitempty"`
+	Name         string          `yaml:"name"`
+	Description  string          `yaml:"description,omitempty"`
+	Resources    Resources       `yaml:"resources"`
+	Deltas       []ResourceDelta `yaml:"deltas"`
+	InitialDelay time.Duration   `yaml:"initialDelay,omitempty"`
 }

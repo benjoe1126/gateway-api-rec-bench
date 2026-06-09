@@ -1,0 +1,19 @@
+name: simple-scenario
+description: some description
+resources:
+  gatewayClasses:
+    count: 1
+    namingScheme: gwclass
+  gateways:
+    count: 3
+    namingScheme: simple-gateway
+    distribution: uniform
+
+deltas:
+  - selector:
+       kind: Gateway
+       name: simple-gateway-1
+    patches:
+      - op: replace
+        path: /metadata/name
+        value: "gateway"

@@ -3,6 +3,7 @@ package scenario
 import (
 	"errors"
 	"fmt"
+	"onlab-bm/pkg/patch"
 	"regexp"
 )
 
@@ -12,27 +13,35 @@ type Resource interface {
 
 type GenericResource struct {
 	Count        uint64 `yaml:"count"`
-	NamingScheme string `yaml:"namingScheme"`
+	NamingScheme string `yaml:"namingScheme,omitempty"`
+}
+
+func (g GenericResource) String() string {
+	return fmt.Sprintf("count: %d, namingScheme: %s", g.Count, g.NamingScheme)
 }
 
 type GenericResourceWithDistribution struct {
-	GenericResource
-	Distribution DistributionType `yaml:"distribution"`
+	GenericResource `yaml:",inline"`
+	Distribution    DistributionType `yaml:"distribution"`
+}
+
+func (g GenericResourceWithDistribution) String() string {
+	return fmt.Sprintf("count: %d, namingScheme: %s, distribution: %s", g.Count, g.NamingScheme, g.Distribution)
 }
 
 type Resources struct {
 	GatewayClasses GatewayClass `yaml:"gatewayClasses"`
 	Gateways       Gateway      `yaml:"gateways"`
-	HTTPRoutes     HTTPRoute    `yaml:"httpRoutes"`
-	GRPCRoutes     GRPCRoute    `yaml:"grpcRoutes"`
-	Services       Service      `yaml:"services"`
+	HTTPRoutes     HTTPRoute    `yaml:"httpRoutes,omitempty"`
+	GRPCRoutes     GRPCRoute    `yaml:"grpcRoutes,omitempty"`
+	Services       Service      `yaml:"services,omitempty"`
 }
 
 type GatewayClass struct {
-	GenericResource
+	GenericResource `yaml:",inline"`
 }
 type Gateway struct {
-	GenericResourceWithDistribution
+	GenericResourceWithDistribution `yaml:",inline"`
 }
 
 var k8sNameRegexp = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
@@ -65,7 +74,7 @@ func (g Gateway) Validate() error {
 }
 
 type HTTPRoute struct {
-	GenericResourceWithDistribution
+	GenericResourceWithDistribution `yaml:",inline"`
 }
 
 func (h HTTPRoute) Validate() error {
@@ -73,7 +82,7 @@ func (h HTTPRoute) Validate() error {
 }
 
 type GRPCRoute struct {
-	GenericResourceWithDistribution
+	GenericResourceWithDistribution `yaml:",inline"`
 }
 
 func (g GRPCRoute) Validate() error {
@@ -81,9 +90,30 @@ func (g GRPCRoute) Validate() error {
 }
 
 type Service struct {
-	GenericResourceWithDistribution
+	GenericResourceWithDistribution `yaml:",inline"`
 }
 
 func (s Service) Validate() error {
 	return genericValidationWithDistribution(s.NamingScheme, s.Distribution, s.Count)
+}
+
+type ResourceKind string
+
+const (
+	ResourceKindGatewayClasses ResourceKind = "GatewayClasses"
+	ResourceKindGateways       ResourceKind = "Gateways"
+	ResourceKindHTTPRoutes     ResourceKind = "HTTPRoutes"
+	ResourceKindGRPCRoutes     ResourceKind = "GRPCRoutes"
+	ResourceKindServices       ResourceKind = "Services"
+)
+
+type ResourceSelector struct {
+	Kind      ResourceKind `yaml:"kind" json:"kind"`
+	Name      string       `yaml:"name" json:"name"`
+	Namespace string       `yaml:"namespace,omitempty" json:"namespace"`
+}
+
+type ResourceDelta struct {
+	ResourceSelector ResourceSelector  `yaml:"selector" json:"selector"`
+	Patches          []patch.JsonPatch `json:"patches,omitempty" yaml:"patches,omitempty"`
 }
