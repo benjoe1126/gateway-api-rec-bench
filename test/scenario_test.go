@@ -2,6 +2,7 @@ package test
 
 import (
 	_ "embed"
+	"onlab-bm/pkg/patch"
 	"onlab-bm/pkg/scenario"
 	"testing"
 
@@ -19,7 +20,16 @@ func TestSimpleScenarioParsing(t *testing.T) {
 		gatewayClassNamingScheme = "gwclass"
 		gatewayCount             = 3
 		gatewayNamingScheme      = "simple-gateway"
-		gatweayDistribution      = scenario.Uniform
+		gatewayDistribution      = scenario.Uniform
+		selectorKind             = "Gateway"
+		selectorName             = "simple-gateway-1"
+	)
+	var (
+		jpatch = patch.JsonPatch{
+			Op:    patch.PatchOpReplace,
+			Path:  "/metadata/name",
+			Value: "gateway",
+		}
 	)
 	var sc scenario.Scenario
 	err := yaml.Unmarshal(simpleScenario, &sc)
@@ -44,8 +54,29 @@ func TestSimpleScenarioParsing(t *testing.T) {
 	if sc.Resources.Gateways.Count != gatewayCount {
 		t.Fatalf("gateway count should be %d, got %d", gatewayCount, sc.Resources.Gateways.Count)
 	}
-	if sc.Resources.Gateways.Distribution != gatweayDistribution {
-		t.Fatalf("gateway distribution should be %s, got %s", gatweayDistribution, sc.Resources.Gateways.Distribution)
+	if sc.Resources.Gateways.Distribution != gatewayDistribution {
+		t.Fatalf("gateway distribution should be %s, got %s", gatewayDistribution, sc.Resources.Gateways.Distribution)
 	}
-	t.Log(sc.Deltas)
+	if len(sc.Deltas) != 1 {
+		t.Fatalf("delta count should be %d, got %d", 1, len(sc.Deltas))
+	}
+	if len(sc.Deltas[0].Patches) != 1 {
+		t.Fatalf("delta patch count should be %d, got %d", 1, len(sc.Deltas[0].Patches))
+	}
+	if sc.Deltas[0].Patches[0] != jpatch {
+		t.Fatalf("json patch should be %v, got %v", jpatch, sc.Deltas[0].Patches[0])
+	}
+	if sc.Deltas[0].ResourceSelector.Kind != selectorKind {
+		t.Fatalf("patch selector kind is %s, got %s", selectorKind, sc.Deltas[0].ResourceSelector.Kind)
+	}
+	if sc.Deltas[0].ResourceSelector.Name != selectorName {
+		t.Fatalf("patch selector name is %s, got %s", selectorName, sc.Deltas[0].ResourceSelector.Name)
+	}
+}
+
+//go:embed resources/scenario_generator.yaml
+var scenarioGenerator []byte
+
+func TestScenarioGeneration(t *testing.T) {
+	
 }
