@@ -4,6 +4,8 @@ import (
 	_ "embed"
 	"onlab-bm/pkg/patch"
 	"onlab-bm/pkg/scenario"
+	"reflect"
+	"slices"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -78,5 +80,74 @@ func TestSimpleScenarioParsing(t *testing.T) {
 var scenarioGenerator []byte
 
 func TestScenarioGeneration(t *testing.T) {
-	
+	var generator scenario.ScenarioGenerator
+	err := yaml.Unmarshal(scenarioGenerator, &generator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedScenarios := []scenario.Scenario{
+		{
+			Name:        "simple-scenario-1",
+			Description: "some description 1",
+			Resources: scenario.Resources{
+				GatewayClasses: scenario.GatewayClass{
+					GenericResource: scenario.GenericResource{
+						Count:        1,
+						NamingScheme: "gwclass",
+					},
+				},
+				Gateways: scenario.Gateway{
+					GenericResourceWithDistribution: scenario.GenericResourceWithDistribution{
+						Distribution: scenario.Uniform,
+						GenericResource: scenario.GenericResource{
+							Count:        3,
+							NamingScheme: "gateway",
+						},
+					},
+				},
+			},
+		},
+		{
+			Name:        "simple-scenario-2",
+			Description: "some description 2",
+			Resources: scenario.Resources{
+				GatewayClasses: scenario.GatewayClass{
+					GenericResource: scenario.GenericResource{
+						Count:        1,
+						NamingScheme: "gwclass-second",
+					},
+				},
+				Gateways: scenario.Gateway{
+					GenericResourceWithDistribution: scenario.GenericResourceWithDistribution{
+						Distribution: scenario.Random,
+						GenericResource: scenario.GenericResource{
+							Count:        6,
+							NamingScheme: "gateway-second",
+						},
+					},
+				},
+			},
+		},
+	}
+	actualScenarios, err := generator.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(actualScenarios) != len(expectedScenarios) {
+		t.Fatalf("scenario count should be %d, got %d", len(expectedScenarios), len(actualScenarios))
+	}
+	sfunc := func(a scenario.Scenario, b scenario.Scenario) int {
+		if a.Name > b.Name {
+			return 1
+		}
+		return -1
+	}
+	slices.SortFunc(expectedScenarios, sfunc)
+	slices.SortFunc(actualScenarios, sfunc)
+	for i, _ := range expectedScenarios {
+		if !reflect.DeepEqual(actualScenarios[i], expectedScenarios[i]) {
+			t.Errorf("scenario %d: expected %v, got %v", i, expectedScenarios[i], actualScenarios[i])
+		}
+	}
+
 }

@@ -47,9 +47,9 @@ type ScenarioTemplate struct {
 }
 
 type Scenario struct {
-	Name         string          `yaml:"name"`
-	Description  string          `yaml:"description,omitempty"`
-	Resources    Resources       `yaml:"resources"`
-	Deltas       []ResourceDelta `yaml:"deltas"`
-	InitialDelay time.Duration   `yaml:"initialDelay,omitempty"`
+	Name         string          `yaml:"name" json:"name"`
+	Description  string          `yaml:"description,omitempty" json:"description,omitempty"`
+	Resources    Resources       `yaml:"resources" json:"resources"`
+	Deltas       []ResourceDelta `yaml:"deltas" json:"deltas"`
+	InitialDelay time.Duration   `yaml:"initialDelay,omitempty" json:"initialDelay,omitempty"`
 }

@@ -1,28 +1,28 @@
-scenarioTemplate:
+scenarioTemplate: |
   {{ range .scenarios }}
-  name: simple-scenario-{{ .index }}
-  description: {{ .description }}
-  resources:
-    {{ with .gwclasses }}
-    gatewayClasses:
-      count: {{ .count }}
-      namingScheme: {{ .namingScheme }}
-    {{ end }}
-    {{ with .gateways }}
-    gateways:
-      count: {{ .count }}
-      namingScheme: {{ .namingScheme }}
-      distribution: {{ .distribution }}
-    {{ end }}
-  deltas:
-    - selector:
-        kind: Gateway
-        name: simple-gateway-1
-      patches:
-        - op: replace
-          path: /metadata/name
-          value: "gateway"
-  {{ end }}
+  - name: simple-scenario-{{ .index }}
+    description: {{ .description }}
+    resources:
+      {{- with .gwclasses }}
+      gatewayClasses:
+        count: {{ .count }}
+        namingScheme: {{ .namingScheme }}
+      {{- end }}
+      {{- with .gateways }}
+      gateways:
+        count: {{ .count }}
+        namingScheme: {{ .namingScheme }}
+        distribution: {{ .distribution }}
+      {{- end }}
+    deltas:
+      - selector:
+          kind: Gateway
+          name: simple-gateway-1
+        patches:
+          - op: replace
+            path: /metadata/name
+            value: "gateway"
+  {{- end }}
 values:
   scenarios:
     - index: 1

@@ -12,8 +12,8 @@ type Resource interface {
 }
 
 type GenericResource struct {
-	Count        uint64 `yaml:"count"`
-	NamingScheme string `yaml:"namingScheme,omitempty"`
+	Count        uint64 `yaml:"count" json:"count"`
+	NamingScheme string `yaml:"namingScheme,omitempty" json:"namingScheme,omitempty"`
 }
 
 func (g GenericResource) String() string {
@@ -21,8 +21,8 @@ func (g GenericResource) String() string {
 }
 
 type GenericResourceWithDistribution struct {
-	GenericResource `yaml:",inline"`
-	Distribution    DistributionType `yaml:"distribution"`
+	GenericResource `yaml:",inline" json:",inline"`
+	Distribution    DistributionType `yaml:"distribution" json:"distribution"`
 }
 
 func (g GenericResourceWithDistribution) String() string {
@@ -30,11 +30,11 @@ func (g GenericResourceWithDistribution) String() string {
 }
 
 type Resources struct {
-	GatewayClasses GatewayClass `yaml:"gatewayClasses"`
-	Gateways       Gateway      `yaml:"gateways"`
-	HTTPRoutes     HTTPRoute    `yaml:"httpRoutes,omitempty"`
-	GRPCRoutes     GRPCRoute    `yaml:"grpcRoutes,omitempty"`
-	Services       Service      `yaml:"services,omitempty"`
+	GatewayClasses GatewayClass `yaml:"gatewayClasses" json:"gatewayClasses"`
+	Gateways       Gateway      `yaml:"gateways" json:"gateways"`
+	HTTPRoutes     HTTPRoute    `yaml:"httpRoutes,omitempty" json:"httpRoutes,omitempty"`
+	GRPCRoutes     GRPCRoute    `yaml:"grpcRoutes,omitempty" json:"grpcRoutes,omitempty"`
+	Services       Service      `yaml:"services,omitempty" json:"services,omitempty"`
 }
 
 type GatewayClass struct {
