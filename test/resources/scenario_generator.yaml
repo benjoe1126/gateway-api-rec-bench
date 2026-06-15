@@ -18,6 +18,7 @@ scenarioTemplate: |
       - selector:
           kind: Gateway
           name: simple-gateway-1
+          namespace: gateway-system
         patches:
           - op: replace
             path: /metadata/name
@@ -33,7 +34,8 @@ values:
       gateways:
         count: 3
         namingScheme: gateway
-        distribution: uniform
+        distribution:
+          type: uniform
     - index: 2
       description: some description 2
       gwclasses:
@@ -42,4 +44,5 @@ values:
       gateways:
         count: 6
         namingScheme: gateway-second
-        distribution: random
+        distribution:
+          type: random

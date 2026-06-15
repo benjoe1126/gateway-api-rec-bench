@@ -22,11 +22,11 @@ func (g GenericResource) String() string {
 
 type GenericResourceWithDistribution struct {
 	GenericResource `yaml:",inline" json:",inline"`
-	Distribution    DistributionType `yaml:"distribution" json:"distribution"`
+	Distribution    Distribution `yaml:"distribution" json:"distribution"`
 }
 
 func (g GenericResourceWithDistribution) String() string {
-	return fmt.Sprintf("count: %d, namingScheme: %s, distribution: %s", g.Count, g.NamingScheme, g.Distribution)
+	return fmt.Sprintf("count: %d, namingScheme: %s, distribution: %s", g.Count, g.NamingScheme, g.Distribution.Type)
 }
 
 type Resources struct {
@@ -60,13 +60,24 @@ func genericValidation(namingScheme string, count uint64) error {
 	return errs
 }
 
-func genericValidationWithDistribution(namingScheme string, distribution DistributionType, count uint64) error {
+func genericValidationWithDistribution(namingScheme string, distribution Distribution, count uint64) error {
 	var errs error
 	errs = errors.Join(errs, genericValidation(namingScheme, count))
-	if distribution != Weighted && distribution != Uniform && distribution != Random {
-		errs = errors.Join(errs, fmt.Errorf("invalid distribution: %s %w", distribution, InvalidDistributionError))
+	if distribution.Type != Weighted && distribution.Type != Uniform && distribution.Type != Random {
+		errs = errors.Join(errs, fmt.Errorf("invalid distribution: %s %w", distribution.Type, InvalidDistributionError))
+	}
+	if distribution.Type == Weighted && distribution.Targets == nil {
+		errs = errors.Join(errs, fmt.Errorf("distribution is weighted but no targets specified"))
 	}
 	return errs
+}
+
+func (g GatewayClass) Validate() error {
+	var err error
+	if g.Count == 0 {
+		err = errors.New("gateway class count should be greater than zero")
+	}
+	return errors.Join(genericValidation(g.NamingScheme, g.Count), err)
 }
 
 func (g Gateway) Validate() error {
@@ -100,11 +111,11 @@ func (s Service) Validate() error {
 type ResourceKind string
 
 const (
-	ResourceKindGatewayClasses ResourceKind = "GatewayClasses"
-	ResourceKindGateways       ResourceKind = "Gateways"
-	ResourceKindHTTPRoutes     ResourceKind = "HTTPRoutes"
-	ResourceKindGRPCRoutes     ResourceKind = "GRPCRoutes"
-	ResourceKindServices       ResourceKind = "Services"
+	ResourceKindGatewayClass ResourceKind = "GatewayClass"
+	ResourceKindGateway      ResourceKind = "Gateway"
+	ResourceKindHTTPRoute    ResourceKind = "HTTPRoute"
+	ResourceKindGRPCRoute    ResourceKind = "GRPCRoute"
+	ResourceKindService      ResourceKind = "Service"
 )
 
 type ResourceSelector struct {

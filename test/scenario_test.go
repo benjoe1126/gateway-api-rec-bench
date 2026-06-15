@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"gopkg.in/yaml.v3"
+	"k8s.io/apimachinery/pkg/util/diff"
 )
 
 //go:embed resources/simple_scenario.yaml
@@ -85,6 +86,23 @@ func TestScenarioGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	//they share the same delta, so instaniate only once
+	deltas := []scenario.ResourceDelta{
+		{
+			ResourceSelector: scenario.ResourceSelector{
+				Kind:      scenario.ResourceKindGateway,
+				Name:      "simple-gateway-1",
+				Namespace: "gateway-system",
+			},
+			Patches: []patch.JsonPatch{
+				{
+					Op:    patch.PatchOpReplace,
+					Path:  "/metadata/name",
+					Value: "gateway",
+				},
+			},
+		},
+	}
 	expectedScenarios := []scenario.Scenario{
 		{
 			Name:        "simple-scenario-1",
@@ -106,6 +124,7 @@ func TestScenarioGeneration(t *testing.T) {
 					},
 				},
 			},
+			Deltas: deltas,
 		},
 		{
 			Name:        "simple-scenario-2",
@@ -127,6 +146,7 @@ func TestScenarioGeneration(t *testing.T) {
 					},
 				},
 			},
+			Deltas: deltas,
 		},
 	}
 	actualScenarios, err := generator.Generate()
@@ -147,6 +167,7 @@ func TestScenarioGeneration(t *testing.T) {
 	for i, _ := range expectedScenarios {
 		if !reflect.DeepEqual(actualScenarios[i], expectedScenarios[i]) {
 			t.Errorf("scenario %d: expected %v, got %v", i, expectedScenarios[i], actualScenarios[i])
+			t.Log(diff.Diff(expectedScenarios[i], actualScenarios[i]))
 		}
 	}
 

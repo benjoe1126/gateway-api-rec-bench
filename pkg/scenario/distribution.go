@@ -14,7 +14,6 @@ const (
 )
 
 type Distribution struct {
-	Type    DistributionType `yaml:"type"`
-	Seed    uint64           `yaml:"seed;omitempty"`
-	Targets []Target         `yaml:"targets;omitempty"`
+	Type    DistributionType `yaml:"type" json:"type"`
+	Targets []Target         `yaml:"targets;omitempty" json:"targets"`
 }

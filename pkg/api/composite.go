@@ -7,6 +7,7 @@ type CompositeApi struct {
 	gwc   *GatewayClassApi
 	route *HttpRouteApi
 	svc   *ServiceApi
+	grpc  *GRPCRouteApi
 }
 
 func NewCompositeApi(client *dynamic.DynamicClient) *CompositeApi {
@@ -15,6 +16,7 @@ func NewCompositeApi(client *dynamic.DynamicClient) *CompositeApi {
 		gwc:   NewGatewayClassApi(client),
 		route: NewHttpRouteApi(client),
 		svc:   NewServiceApi(client),
+		grpc:  NewGRPCRouteApi(client),
 	}
 }
 
@@ -29,4 +31,7 @@ func (api *CompositeApi) HTTPRoute() *HttpRouteApi {
 }
 func (api *CompositeApi) Service() *ServiceApi {
 	return api.svc
+}
+func (api *CompositeApi) GRPCRoute() *GRPCRouteApi {
+	return api.grpc
 }
