@@ -3,10 +3,10 @@ name: simple-scenario
 description: some description
 resources:
   gatewayClasses:
-    count: 1
+    count: 3
     namingScheme: gwclass
   gateways:
-    count: 3
+    count: 6
     namingScheme: simple-gateway
     distribution:
       type: uniform

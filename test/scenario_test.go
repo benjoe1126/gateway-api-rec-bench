@@ -1,7 +1,10 @@
 package test
 
 import (
+	"context"
 	_ "embed"
+	"log/slog"
+	"onlab-bm/pkg/api"
 	"onlab-bm/pkg/patch"
 	"onlab-bm/pkg/scenario"
 	"reflect"
@@ -9,7 +12,9 @@ import (
 	"testing"
 
 	"gopkg.in/yaml.v3"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/diff"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 //go:embed resources/simple_scenario.yaml
@@ -57,8 +62,8 @@ func TestSimpleScenarioParsing(t *testing.T) {
 	if sc.Resources.Gateways.Count != gatewayCount {
 		t.Fatalf("gateway count should be %d, got %d", gatewayCount, sc.Resources.Gateways.Count)
 	}
-	if sc.Resources.Gateways.Distribution != gatewayDistribution {
-		t.Fatalf("gateway distribution should be %s, got %s", gatewayDistribution, sc.Resources.Gateways.Distribution)
+	if sc.Resources.Gateways.Distribution.Type != gatewayDistribution {
+		t.Fatalf("gateway distribution should be %s, got %s", gatewayDistribution, sc.Resources.Gateways.Distribution.Type)
 	}
 	if len(sc.Deltas) != 1 {
 		t.Fatalf("delta count should be %d, got %d", 1, len(sc.Deltas))
@@ -116,7 +121,9 @@ func TestScenarioGeneration(t *testing.T) {
 				},
 				Gateways: scenario.Gateway{
 					GenericResourceWithDistribution: scenario.GenericResourceWithDistribution{
-						Distribution: scenario.Uniform,
+						Distribution: scenario.Distribution{
+							Type: scenario.Uniform,
+						},
 						GenericResource: scenario.GenericResource{
 							Count:        3,
 							NamingScheme: "gateway",
@@ -138,7 +145,9 @@ func TestScenarioGeneration(t *testing.T) {
 				},
 				Gateways: scenario.Gateway{
 					GenericResourceWithDistribution: scenario.GenericResourceWithDistribution{
-						Distribution: scenario.Random,
+						Distribution: scenario.Distribution{
+							Type: scenario.Random,
+						},
 						GenericResource: scenario.GenericResource{
 							Count:        6,
 							NamingScheme: "gateway-second",
@@ -170,5 +179,89 @@ func TestScenarioGeneration(t *testing.T) {
 			t.Log(diff.Diff(expectedScenarios[i], actualScenarios[i]))
 		}
 	}
+}
 
+// builds its resource tree internally, so testing is plausable
+type mockApi[T api.GatewayV1Resource] struct {
+	resourceTree map[string]T
+}
+
+func (m *mockApi[T]) Get(ctx context.Context, name, namespace string) (T, error) {
+	return nil, nil
+}
+
+func (m *mockApi[T]) List(ctx context.Context, namespace string) ([]T, error) {
+	return nil, nil
+}
+
+func (m *mockApi[T]) Create(ctx context.Context, res T) error {
+	m.resourceTree[res.GetName()] = res
+	return nil
+}
+
+func (m *mockApi[T]) Patch(ctx context.Context, name, namespace string, patches []patch.JsonPatch) error {
+	return nil
+}
+
+func (m *mockApi[T]) Delete(ctx context.Context, name, namespace string) error {
+	return nil
+}
+
+type mockCompositeApi struct {
+	gw        mockApi[*gatewayv1.Gateway]
+	gwc       mockApi[*gatewayv1.GatewayClass]
+	httproute mockApi[*gatewayv1.HTTPRoute]
+	svc       mockApi[*v1.Service]
+	grpc      mockApi[*gatewayv1.GRPCRoute]
+}
+
+func (m mockCompositeApi) Gateway() api.K8STypedAPI[*gatewayv1.Gateway] {
+	return &m.gw
+}
+
+func (m mockCompositeApi) GatewayClass() api.K8STypedAPI[*gatewayv1.GatewayClass] {
+	return &m.gwc
+}
+
+func (m mockCompositeApi) HTTPRoute() api.K8STypedAPI[*gatewayv1.HTTPRoute] {
+	return &m.httproute
+}
+
+func (m mockCompositeApi) Service() api.K8STypedAPI[*v1.Service] {
+	return &m.svc
+}
+
+func (m mockCompositeApi) GRPCRoute() api.K8STypedAPI[*gatewayv1.GRPCRoute] {
+	return &m.grpc
+}
+
+func TestScenarioInit(t *testing.T) {
+	var sc scenario.Scenario
+	capi := mockCompositeApi{
+		gw: mockApi[*gatewayv1.Gateway]{
+			resourceTree: make(map[string]*gatewayv1.Gateway),
+		},
+		gwc: mockApi[*gatewayv1.GatewayClass]{
+			resourceTree: make(map[string]*gatewayv1.GatewayClass),
+		},
+		httproute: mockApi[*gatewayv1.HTTPRoute]{
+			resourceTree: make(map[string]*gatewayv1.HTTPRoute),
+		},
+		svc: mockApi[*v1.Service]{
+			resourceTree: make(map[string]*v1.Service),
+		},
+		grpc: mockApi[*gatewayv1.GRPCRoute]{
+			resourceTree: make(map[string]*gatewayv1.GRPCRoute),
+		},
+	}
+	err := yaml.Unmarshal(simpleScenario, &sc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sc.Init(context.Background(), slog.New(slog.DiscardHandler), &capi); err != nil {
+		t.Fatalf("scenario initialization failed: %v", err)
+	}
+	for k, v := range capi.gw.resourceTree {
+		t.Log(k, v.Spec.GatewayClassName)
+	}
 }

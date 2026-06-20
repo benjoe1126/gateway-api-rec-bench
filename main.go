@@ -366,7 +366,7 @@ func modHook(at *atomic.Int64, diff int64) func(...any) {
 	}
 }
 
-func flagBasedBaseConfig(capi *api.CompositeApi) ([]suite.DeltaInterface, error) {
+func flagBasedBaseConfig(capi api.CompositeApi) ([]suite.DeltaInterface, error) {
 	if err := capi.GatewayClass().Create(context.Background(), &baseGatewayClass); err != nil {
 		return nil, err
 	}
