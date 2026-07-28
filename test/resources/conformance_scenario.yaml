@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=../../scneario_schema.json
+
+name: confromance-scenario
+description: some description
+resources:
+  gatewayClasses:
+    count: 3
+    namingScheme: gwclass
+  gateways:
+    count: 6
+    namingScheme: simple-gateway
+    distribution:
+      type: uniform
+  httpRoutes:
+    count: 12
+    namingScheme: httproute
+    distribution:
+      type: weighted
+      targets:
+        - parentName: simple-gateway-1
+          weight: 4
+        - parentName: simple-gateway-2
+          weight: 4
+        - parentName: simple-gateway-3
+          weight: 2
+  grpcRoutes:
+    count: 3
+    namingScheme: grpcroute
+    distribution:
+      type: random
+  services:
+    namingScheme: "service"
+    count: 12
+    distribution:
+      type: uniform
+
+deltas:
+  - selector:
+      kind: Gateway
+      name: simple-gateway-1
+      namespace: "gateway-system"
+    patches:
+      - op: replace
+        path: /metadata/name
+        value: "gateway"

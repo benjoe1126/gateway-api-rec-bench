@@ -235,6 +235,9 @@ func (m mockCompositeApi) GRPCRoute() api.K8STypedAPI[*gatewayv1.GRPCRoute] {
 	return &m.grpc
 }
 
+//go:embed resources/conformance_scenario.yaml
+var confirmanceScenario []byte
+
 func TestScenarioInit(t *testing.T) {
 	var sc scenario.Scenario
 	capi := mockCompositeApi{
@@ -254,14 +257,65 @@ func TestScenarioInit(t *testing.T) {
 			resourceTree: make(map[string]*gatewayv1.GRPCRoute),
 		},
 	}
-	err := yaml.Unmarshal(simpleScenario, &sc)
+	err := yaml.Unmarshal(confirmanceScenario, &sc)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := sc.Init(context.Background(), slog.New(slog.DiscardHandler), &capi); err != nil {
 		t.Fatalf("scenario initialization failed: %v", err)
 	}
-	for k, v := range capi.gw.resourceTree {
-		t.Log(k, v.Spec.GatewayClassName)
+	countPerGwClass := map[string]int{}
+	for _, v := range capi.gw.resourceTree {
+		gwcName := string(v.Spec.GatewayClassName)
+		countPerGwClass[gwcName] = countPerGwClass[gwcName] + 1
+		if countPerGwClass[gwcName] > 2 {
+			t.Errorf("gatewayclass has more than two gateways attached, which should not happend with uniform distribtuion with %d gwclasses and %d gateways", sc.Resources.GatewayClasses.Count, sc.Resources.Gateways.Count)
+		}
 	}
+	for k, v := range countPerGwClass {
+		if v != 2 {
+			t.Errorf("gateway class %s count should be %d, got %d", k, 2, v)
+		}
+	}
+	routePerGw := map[string]int{}
+	for _, v := range capi.gw.resourceTree {
+		gwName := string(v.Name)
+		routePerGw[gwName] = 0
+	}
+	for _, v := range capi.httproute.resourceTree {
+		gwName := string(v.Spec.ParentRefs[0].Name)
+		routePerGw[gwName] = routePerGw[gwName] + 1
+	}
+	for k, v := range routePerGw {
+		switch k {
+		case "simple-gateway-1", "simple-gateway-2", "simple-gateway-3":
+			if v == 0 {
+				t.Errorf("gateway %s should have at least one http route associated with it", k)
+			}
+		default:
+			if v != 0 {
+				t.Errorf("gateway %s should have no http route associated with it", k)
+			}
+		}
+	}
+	// Skipping GRPC testing hence it is the exact same as HTTP Routes
+	svcCountPerRoute := map[string]int{}
+	for _, v := range capi.httproute.resourceTree {
+		routeName := v.Name
+		t.Log(routeName, v.Spec.Rules[0].BackendRefs)
+		svcCountPerRoute[routeName] = len(v.Spec.Rules[0].BackendRefs)
+	}
+	for _, v := range capi.grpc.resourceTree {
+		routeName := v.Name
+		t.Log(routeName, v.Spec.Rules[0].BackendRefs)
+		svcCountPerRoute[routeName] = len(v.Spec.Rules[0].BackendRefs)
+	}
+	svcCount := len(capi.svc.resourceTree)
+	routeCount := len(capi.grpc.resourceTree) + len(capi.httproute.resourceTree)
+	for name, v := range svcCountPerRoute {
+		if v > 1 {
+			t.Errorf("uniform distribution with %d services and %d routes requires no route to have more than a single service, found %d for route %s", svcCount, routeCount, v, name)
+		}
+	}
+
 }

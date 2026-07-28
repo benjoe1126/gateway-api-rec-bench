@@ -114,24 +114,11 @@ var (
 			Hostnames: []gatewayv1.Hostname{},
 			Rules: []gatewayv1.HTTPRouteRule{
 				{
-					BackendRefs: []gatewayv1.HTTPBackendRef{
-						{
-							BackendRef: gatewayv1.BackendRef{
-								BackendObjectReference: gatewayv1.BackendObjectReference{
-									Name: gatewayv1.ObjectName(baseService.Name),
-									Port: &httPort,
-								},
-							},
-						},
-					},
+					BackendRefs: []gatewayv1.HTTPBackendRef{},
 				},
 			},
 			CommonRouteSpec: gatewayv1.CommonRouteSpec{
-				ParentRefs: []gatewayv1.ParentReference{
-					{
-						Name: "base-gateway-0",
-					},
-				},
+				ParentRefs: []gatewayv1.ParentReference{},
 			},
 		},
 	}
@@ -148,16 +135,7 @@ var (
 			Hostnames: []gatewayv1.Hostname{},
 			Rules: []gatewayv1.GRPCRouteRule{
 				{
-					BackendRefs: []gatewayv1.GRPCBackendRef{
-						{
-							BackendRef: gatewayv1.BackendRef{
-								BackendObjectReference: gatewayv1.BackendObjectReference{
-									Name: gatewayv1.ObjectName(baseService.Name),
-									Port: &httPort,
-								},
-							},
-						},
-					},
+					BackendRefs: []gatewayv1.GRPCBackendRef{},
 				},
 			},
 			CommonRouteSpec: gatewayv1.CommonRouteSpec{
@@ -231,11 +209,11 @@ func (s *Scenario) initGateways(ctx context.Context, logger *slog.Logger, gwclas
 			gw.Name = fmt.Sprintf("%s-%d", s.Resources.Gateways.NamingScheme, i)
 			switch distribution.Type {
 			case Uniform:
-				gwClassName = distribtuionWithLeastAttached(countPerGwclass)
+				gwClassName = distributionWithLeastAttached(countPerGwclass)
 			case Random:
-				gwClassName = distribtuionRandom(gwclasses)
+				gwClassName = distributionRandom(gwclasses)
 			case Weighted:
-				gwClassName = distribtuionWithWeight(s.Resources.Gateways.Distribution.Targets)
+				gwClassName = distributionWithWeight(s.Resources.Gateways.Distribution.Targets)
 			}
 			gw.Spec.GatewayClassName = gatewayv1.ObjectName(gwClassName)
 			gateways[gw.Name] = gw
@@ -261,11 +239,11 @@ func (s *Scenario) initHTTPRoutes(ctx context.Context, logger *slog.Logger, gate
 			httproute.Name = fmt.Sprintf("%s-%d", s.Resources.HTTPRoutes.NamingScheme, i)
 			switch routeDistribution.Type {
 			case Uniform:
-				gwName = distribtuionWithLeastAttached(countPerGateway)
+				gwName = distributionWithLeastAttached(countPerGateway)
 			case Random:
-				gwName = distribtuionRandom(gateways)
+				gwName = distributionRandom(gateways)
 			case Weighted:
-				gwName = distribtuionWithWeight(s.Resources.HTTPRoutes.Distribution.Targets)
+				gwName = distributionWithWeight(s.Resources.HTTPRoutes.Distribution.Targets)
 			}
 			kind := gatewayv1.Kind(baseGateway.Kind)
 			ns := gatewayv1.Namespace(baseGateway.Namespace)
@@ -297,11 +275,11 @@ func (s *Scenario) initGRPCRoutes(ctx context.Context, logger *slog.Logger, gate
 			grpcRoute.Name = fmt.Sprintf("%s-%d", s.Resources.GRPCRoutes.NamingScheme, i)
 			switch routeDistribution.Type {
 			case Uniform:
-				gwName = distribtuionWithLeastAttached(countPerGateway)
+				gwName = distributionWithLeastAttached(countPerGateway)
 			case Random:
-				gwName = distribtuionRandom(gateways)
+				gwName = distributionRandom(gateways)
 			case Weighted:
-				gwName = distribtuionWithWeight(s.Resources.GRPCRoutes.Distribution.Targets)
+				gwName = distributionWithWeight(s.Resources.GRPCRoutes.Distribution.Targets)
 			}
 			kind := gatewayv1.Kind(baseGateway.Kind)
 			ns := gatewayv1.Namespace(baseGateway.Namespace)
@@ -341,11 +319,11 @@ func (s *Scenario) initServices(ctx context.Context, logger *slog.Logger, httpRo
 			routeName := ""
 			switch serviceDistribution.Type {
 			case Uniform:
-				routeName = distribtuionWithLeastAttached(countPerRoute)
+				routeName = distributionWithLeastAttached(countPerRoute)
 			case Random:
-				routeName = distribtuionRandom(routeCollection)
+				routeName = distributionRandom(routeCollection)
 			case Weighted:
-				routeName = distribtuionWithWeight(s.Resources.Services.Distribution.Targets)
+				routeName = distributionWithWeight(s.Resources.Services.Distribution.Targets)
 			}
 			w := int32(rand.Int())
 			var (
@@ -356,7 +334,7 @@ func (s *Scenario) initServices(ctx context.Context, logger *slog.Logger, httpRo
 			)
 			if v, ok := httpRoutes[routeName]; ok {
 				route := v.DeepCopy()
-				v.Spec.Rules[0].BackendRefs = append(v.Spec.Rules[0].BackendRefs, gatewayv1.HTTPBackendRef{
+				route.Spec.Rules[0].BackendRefs = append(v.Spec.Rules[0].BackendRefs, gatewayv1.HTTPBackendRef{
 					BackendRef: gatewayv1.BackendRef{
 						Weight: &w,
 						BackendObjectReference: gatewayv1.BackendObjectReference{
@@ -368,6 +346,20 @@ func (s *Scenario) initServices(ctx context.Context, logger *slog.Logger, httpRo
 					},
 				})
 				httpRoutes[routeName] = route
+			} else if v, ok := grpcRoutes[routeName]; ok {
+				route := v.DeepCopy()
+				route.Spec.Rules[0].BackendRefs = append(v.Spec.Rules[0].BackendRefs, gatewayv1.GRPCBackendRef{
+					BackendRef: gatewayv1.BackendRef{
+						Weight: &w,
+						BackendObjectReference: gatewayv1.BackendObjectReference{
+							Name:      name,
+							Group:     &group,
+							Kind:      &kind,
+							Namespace: &namespace,
+						},
+					},
+				})
+				grpcRoutes[routeName] = route
 			}
 			services[service.Name] = service
 		}
@@ -468,26 +460,25 @@ func (s *Scenario) Init(ctx context.Context, logger *slog.Logger, capi api.Compo
 	}
 	return nil
 }
-func distribtuionWithLeastAttached(parentToChildCount map[string]int) string {
+func distributionWithLeastAttached(parentToChildCount map[string]int) string {
 	minValue := math.MaxInt32
 	minName := ""
 	for k, v := range parentToChildCount {
 		if v < minValue {
-			minValue = v
-			minName = k
+			minName, minValue = k, v
 		}
 	}
-	parentToChildCount[minName] += 1
+	parentToChildCount[minName] += parentToChildCount[minName] + 1
 	return minName
 }
-func distribtuionRandom[T any](currentDistribtuion map[string]T) string {
+func distributionRandom[T any](currentDistribtuion map[string]T) string {
 	asSclie := slices.Sorted(maps.Keys(currentDistribtuion))
 	randomIndex := rand.Intn(len(asSclie))
 	return asSclie[randomIndex]
 
 }
 
-func distribtuionWithWeight(weights []Target) string {
+func distributionWithWeight(weights []Target) string {
 	if len(weights) == 0 {
 		return ""
 	}
@@ -502,7 +493,6 @@ func distribtuionWithWeight(weights []Target) string {
 	}
 
 	r := rand.Intn(totalWeight)
-
 	cumulative := 0
 	for _, w := range weights {
 		cumulative += int(w.Weight)
